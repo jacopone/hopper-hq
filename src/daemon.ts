@@ -10,7 +10,8 @@ import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
 import { callDaemon } from './client.js';
 import { Collector } from './collector.js';
-import { DEFAULT_PORT, resolvePaths, type Paths } from './config.js';
+import { DEFAULT_PORT, resolveFloorMode, resolvePaths, type Paths } from './config.js';
+import { rulesFor, type FloorMode } from './core/feature.js';
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from './daemon-file.js';
 import { DataDirInUseError, lockDataDir, type DataDirLock } from './daemon-lock.js';
 import { loginUrl, UiAuth } from './server/auth.js';
@@ -30,6 +31,8 @@ export interface DaemonOptions {
   /** The config directories to watch, 'DIR' or 'DIR=LABEL' each: one per account when several accounts run on the machine. */
   claudeDirs?: string[];
   dataDir?: string;
+  /** One floor per feature (default) or per repository. */
+  floors?: FloorMode;
   /** Watch the config directories on disk (default true). The mod works either way. */
   watchFiles?: boolean;
   log?: (line: string) => void;
@@ -145,7 +148,8 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   const resolveWorkspace = createGitResolver();
   const watchFiles = !opts.demo && opts.watchFiles !== false;
   // Restored subagents run on until the first scan has reported on them; with no scan to come, they stop at once.
-  const collector = new Collector({ resolveWorkspace, store, acceptSources: opts.demo ? ['demo'] : ['hook', 'fs'], log, ignoreCwd, holdRestored: watchFiles });
+  const floors = opts.floors ?? resolveFloorMode(undefined);
+  const collector = new Collector({ resolveWorkspace, store, acceptSources: opts.demo ? ['demo'] : ['hook', 'fs'], log, ignoreCwd, holdRestored: watchFiles, featureRules: rulesFor(floors) });
   const summarizer = new Summarizer({
     source: collector,
     config: opts.demo ? async () => DEMO_SUMMARY_CONFIG : cachedSummaryConfig(paths.dataDir),
@@ -206,6 +210,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   fsAdapter?.start();
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
+  if (floors !== 'feature') log(`hopper-hq gives each repository a floor (--floors ${floors})`);
   if (labels && paths.claudeDirs.length > 1) log(`hopper-hq watches ${paths.claudeDirs.length} config directories: ${paths.claudeDirs.map((d) => `${d.dir} (${labels.get(d.dir)})`).join(', ')}`);
 
   return {

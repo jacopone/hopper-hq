@@ -102,6 +102,12 @@ To run the daemon in the foreground instead, in its own tmux window or terminal,
 
 This already works from the files Claude Code writes, without the mod.
 
+### One floor per repository
+
+The façade has one floor per feature: the branch, shared by every repository working on it. A team whose branches name tasks rather than features, one session each, gets a tall building of small floors. `--floors repo` gives each repository one floor instead: every session sits in its repository's department, and each checkout, the main one or a worktree, keeps its own pod, with the branch on its placard. `HOPPER_HQ_FLOORS=repo` says the same for a daemon started by a service. The default stays `feature`.
+
+A branch Claude Code made for a worktree (`worktree-<name>`) never makes a feature, in either mode.
+
 ### Several accounts on one machine
 
 hopper-hq watches Claude Code's config directory, `~/.claude` or `$CLAUDE_CONFIG_DIR`. When several accounts run on the machine, each with its own `CLAUDE_CONFIG_DIR`, name every directory, each with an optional label after `=`:
@@ -296,7 +302,7 @@ Each summary is one call to the model, a small one by default. A session gets at
 | --- | --- |
 | `hopper-hq up` | Starts the daemon in the background unless it is running, then opens the building like `ui`. Use `--no-open` to print the link only. |
 | `hopper-hq down` | Stops the daemon. |
-| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine). |
+| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository). |
 | `hopper-hq status` | Prints a summary. Use `--format text`, `tmux` or `json`. |
 | `hopper-hq ls` | Lists floors and their sessions. |
 | `hopper-hq ack` | Marks finished sessions as seen. |

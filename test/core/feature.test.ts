@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { DEFAULT_FEATURE_RULES, deriveFeature } from '../../src/core/feature.js';
+import { DEFAULT_FEATURE_RULES, REPO_FLOOR_RULES, deriveFeature, rulesFor } from '../../src/core/feature.js';
 
 describe('deriveFeature', () => {
   it('returns null for missing, trunk, detached and generated branches', () => {
@@ -8,6 +8,8 @@ describe('deriveFeature', () => {
     }
     expect(deriveFeature('claude/distracted-merkle-82a816', 'shop')).toBeNull();
     expect(deriveFeature('worktree-agent-a1b2', 'shop')).toBeNull();
+    // Claude Code's worktree isolation names its branch after the worktree: a tool's name, not a feature.
+    expect(deriveFeature('worktree-fup-redefinition', 'shop')).toBeNull();
   });
 
   it('uses the last path segment, lower-cased', () => {
@@ -42,5 +44,13 @@ describe('deriveFeature', () => {
     expect(deriveFeature('main', 'x', rules)).toBe('main');
     expect(deriveFeature('trunk', 'x', rules)).toBeNull();
     expect(deriveFeature('feat/T42-thing', 'x', rules)).toBe('T42');
+  });
+});
+
+describe('floors by repository', () => {
+  it('makes no feature of any branch, so that every session sits in its repository\'s department', () => {
+    for (const b of ['feat/checkout-v2', 'gcp-minimal', 'PROJ-123-fix', 'main', null]) expect(deriveFeature(b, 'shop', REPO_FLOOR_RULES)).toBeNull();
+    expect(rulesFor('repo')).toBe(REPO_FLOOR_RULES);
+    expect(rulesFor('feature')).toBe(DEFAULT_FEATURE_RULES);
   });
 });

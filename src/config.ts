@@ -1,5 +1,6 @@
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
+import { FLOOR_MODES, type FloorMode } from './core/feature.js';
 
 /** One of Claude Code's config directories (sessions/, projects/, settings.json), and what to call its sessions. */
 export interface ClaudeDir {
@@ -13,6 +14,13 @@ export interface Paths {
   claudeDirs: ClaudeDir[];
   /** hopper-hq's own data directory (token, daemon.json, database). */
   dataDir: string;
+}
+
+/** The floor mode named by an option or HOPPER_HQ_FLOORS; the default, feature, when neither says; an error for a word that is no mode. */
+export function resolveFloorMode(value: string | undefined, env: NodeJS.ProcessEnv = process.env): FloorMode {
+  const word = value ?? env.HOPPER_HQ_FLOORS ?? 'feature';
+  if (!(FLOOR_MODES as readonly string[]).includes(word)) throw new Error(`Unknown floor mode: ${word} (one of ${FLOOR_MODES.join(', ')})`);
+  return word as FloorMode;
 }
 
 export interface PathOptions {

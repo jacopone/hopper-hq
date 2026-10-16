@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolvePaths } from '../src/config.js';
+import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolveFloorMode, resolvePaths } from '../src/config.js';
 
 describe('parseClaudeDir', () => {
   it('reads a directory, and a label after the last "="', () => {
@@ -54,6 +54,15 @@ describe('resolvePaths', () => {
   it('ignores an empty list and empty entries', () => {
     expect(resolvePaths({ claudeDirs: [] }, {}).claudeDirs).toEqual([{ dir: home, label: null }]);
     expect(resolvePaths({}, { HOPPER_HQ_CLAUDE_DIRS: `${delimiter}/a${delimiter}` }).claudeDirs).toEqual([{ dir: '/a', label: null }]);
+  });
+});
+
+describe('resolveFloorMode', () => {
+  it('takes the option, else HOPPER_HQ_FLOORS, else feature, and refuses other words', () => {
+    expect(resolveFloorMode('repo', { HOPPER_HQ_FLOORS: 'feature' })).toBe('repo');
+    expect(resolveFloorMode(undefined, { HOPPER_HQ_FLOORS: 'repo' })).toBe('repo');
+    expect(resolveFloorMode(undefined, {})).toBe('feature');
+    expect(() => resolveFloorMode('branch', {})).toThrow(/Unknown floor mode: branch/);
   });
 });
 

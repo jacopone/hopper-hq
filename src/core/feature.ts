@@ -1,7 +1,7 @@
 export interface FeatureRules {
   /** Compared case-insensitively. Sessions on these branches have no feature. */
   trunkBranches: string[];
-  /** Branches created by tools rather than people. */
+  /** Branches created by tools rather than people: Claude Code names a worktree's branch 'worktree-<name>' (subagents' are 'worktree-agent-<id>'). */
   generatedBranches: RegExp[];
   /** First capture group is the ticket id. */
   ticketPatterns: RegExp[];
@@ -9,9 +9,22 @@ export interface FeatureRules {
 
 export const DEFAULT_FEATURE_RULES: FeatureRules = {
   trunkBranches: ['main', 'master', 'dev', 'develop', 'trunk', 'head'],
-  generatedBranches: [/^claude\//i, /^worktree-agent-/i],
+  generatedBranches: [/^claude\//i, /^worktree-/i],
   ticketPatterns: [/\b([A-Z][A-Z0-9]{1,9}-\d+)\b/, /\b(CU-[a-z0-9]{4,})\b/i],
 };
+
+/** Which floors the building has: one per feature (branch, across repositories), or one per repository. */
+export type FloorMode = 'feature' | 'repo';
+
+export const FLOOR_MODES: readonly FloorMode[] = ['feature', 'repo'];
+
+/** Floors by repository: no branch makes a feature, so every session sits in its repository's department, its checkout its pod. */
+export const REPO_FLOOR_RULES: FeatureRules = { ...DEFAULT_FEATURE_RULES, generatedBranches: [/^/] };
+
+/** The rules for a floor mode. */
+export function rulesFor(mode: FloorMode): FeatureRules {
+  return mode === 'repo' ? REPO_FLOOR_RULES : DEFAULT_FEATURE_RULES;
+}
 
 /** Feature key for a branch, or null when the session has no feature (trunk, detached, generated). */
 export function deriveFeature(
