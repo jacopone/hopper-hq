@@ -1,3 +1,4 @@
+import { taskIdOf } from './lobby.js';
 import { truncate } from './tool-label.js';
 import type { ChildAgent, CollectorEvent, EventOf, RunAgent, Session, SessionState, WorkflowRun, Workspace } from './types.js';
 
@@ -242,6 +243,8 @@ export function applyEvent(prev: Session | undefined, e: CollectorEvent): Sessio
         // A pane and its tmux session come from one tmux field: take them together.
         ...(e.tmuxPane != null ? { tmuxPane: e.tmuxPane, tmuxSession: e.tmuxSession ?? null } : {}),
         account: e.account ?? s.account,
+        // A name that starts with a task id names the task; a name without one leaves the gatekeeper's word.
+        task: (e.name ? taskIdOf(e.name) : null) ?? s.task,
         transcriptPath: e.transcriptPath ?? s.transcriptPath,
         startedAt: Math.min(s.startedAt, e.startedAt ?? s.startedAt),
       };

@@ -32,6 +32,16 @@ describe("the gatekeeper's task events", () => {
     await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: null });
     expect(c.session('S1')?.task).toBeNull();
   });
+
+  it('reads the task id from a session\'s name, and keeps the gatekeeper\'s when the name has none', async () => {
+    const c = collector();
+    await c.ingest(hook({ type: 'session.seen', name: 'G-268 hopper-hq fleet-building', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    expect(c.session('S1')?.task).toBe('G-268');
+    await c.ingest(hook({ type: 'session.seen', sessionId: 'S2', name: 'orders-api-a1', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    await c.ingest({ type: 'task', sessionId: 'S2', ts: NOW, source: 'gatekeeper', task: 'G-9' });
+    await c.ingest(hook({ type: 'session.seen', sessionId: 'S2', name: 'orders-api-a1', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    expect(c.session('S2')?.task).toBe('G-9');
+  });
 });
 
 describe('the terminal\'s pane events', () => {
