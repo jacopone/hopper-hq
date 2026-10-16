@@ -71,6 +71,8 @@ describe('parseLimits and parseWatchdogTail', () => {
     expect(parseWatchdogTail(log + '\n13:51 WATCHDOG: pressione passata (sessioni 34% del tetto) → tetto ripristinato a 7')).toEqual({ pausedPanes: [], held: false });
     expect(parseWatchdogTail("13:36 WATCHDOG: sessioni Claude all'88% → lanci fermati (sessions_max 0), pausa mandata a: ")).toEqual({ pausedPanes: [], held: true });
     expect(parseWatchdogTail('')).toEqual({ pausedPanes: [], held: false });
+    // The watchdog started again after its last word: what it held and paused is forgotten.
+    expect(parseWatchdogTail(log + '\n16:48 avvio: soglie mem full avg10 ≥15% per 1\'')).toEqual({ pausedPanes: [], held: false });
     // A pane that is not herdr's is not a pane.
     expect(parseWatchdogTail('WATCHDOG: x → lanci fermati, pausa mandata a: wE:p1E %7 rm;-rf')).toEqual({ pausedPanes: ['wE:p1E'], held: true });
   });
@@ -117,6 +119,20 @@ describe('buildSeats', () => {
       ['Personale', false, false, true, false, 16],
     ]);
     expect(seats[3]!.session).toEqual({ usedPct: 6, resetsAt: 1792166400_000, readAt: (NOW / 1000 - 60) * 1000 });
+  });
+
+  it('reads a window whose reset has passed as empty, for the percentage shown and for full', () => {
+    const past = NOW / 1000 - 60;
+    const docs = [parseLimitDoc(JSON.stringify({ email: 'jacopo@example.com', five_hour: { used_percentage: 99, resets_at: past }, seven_day: { used_percentage: 56, resets_at: past + 86_400 }, written_at: NOW / 1000 - 120 }))!];
+    const [jacopo] = buildSeats(docs, { 'Jacopo Anselmi': { email: 'jacopo@example.com' } }, [], 'Jacopo Anselmi', NOW);
+    expect(jacopo!.session).toMatchObject({ usedPct: 0, resetsAt: past * 1000 });
+    expect(jacopo!.full).toBe(false);
+  });
+
+  it('takes staleness from the week alone: a reading without a five-hour window is fresh, and its five hours are empty', () => {
+    const docs = [parseLimitDoc(JSON.stringify({ email: 'francesco@example.com', seven_day: { used_percentage: 23 }, written_at: NOW / 1000 - 60 }))!];
+    const [francesco] = buildSeats(docs, { 'Francesco Datini': { email: 'francesco@example.com' } }, ['Francesco Datini'], null, NOW);
+    expect([francesco!.stale, francesco!.full, francesco!.session, francesco!.week?.usedPct]).toEqual([false, false, null, 23]);
   });
 
   it('is null for a reading that is not one', () => {

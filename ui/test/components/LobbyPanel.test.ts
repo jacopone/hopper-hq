@@ -15,6 +15,7 @@ const detail: LobbyDetail = {
     { account: 'jacopo@example.com', name: 'Jacopo', session: { usedPct: 6, resetsAt: null, readAt: NOW }, week: { usedPct: 41, resetsAt: null, readAt: NOW }, current: true, full: false, stale: false, turnable: true },
     { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: null, readAt: NOW }, current: false, full: true, stale: false, turnable: true },
     { account: 'pietro@example.com', name: 'Pietro', session: null, week: null, current: false, full: false, stale: true, turnable: true },
+    { account: 'francesco@example.com', name: 'Francesco', session: null, week: { usedPct: 23, resetsAt: null, readAt: NOW }, current: false, full: false, stale: false, turnable: true },
   ],
   turnTo: 'francesco@example.com',
   power: { usedBytes: 34.6 * 2 ** 30, maxBytes: 44.7 * 2 ** 30, warnPct: 85, held: false, pausedPanes: ['wE:p1E'], paused: [{ pane: 'wE:p1E', sessionId: 'S1', name: 'G-256 e2e' }] },
@@ -50,7 +51,7 @@ describe('LobbyPanel', () => {
   it('lists the queue with each reason and wait, the seats with both windows, the turn, and the power with the paused sessions', () => {
     const { section, onDesk } = panel();
     expect([...section('Waiting outside').querySelectorAll('li')].map(text)).toEqual(['G-270 segnali a J · leonardo@example.com · 4m · slice al 84%']);
-    expect([...section('Seats').querySelectorAll('li')].map(text)).toEqual(['▸ Jacopo 5h 6% · 7d 41%', 'Luca 5h 2% · 7d 86% · full', 'Pietro no fresh reading']);
+    expect([...section('Seats').querySelectorAll('li')].map(text)).toEqual(['▸ Jacopo 5h 6% · 7d 41%', 'Luca 5h 2% · 7d 86% · full', 'Pietro no fresh reading', 'Francesco 5h – · 7d 23%']);
     expect(text(section('Seats').querySelector('.turn'))).toBe('Turn → francesco@example.com');
     expect(text(section('Power').querySelector('.gauge-text'))).toBe('34.6 / 44.7 GiB (77%) · mark 85%');
     const paused = section('Power').querySelector('.paused button')!;

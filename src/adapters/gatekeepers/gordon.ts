@@ -27,25 +27,39 @@ export const DEFAULT_LIMITS_DIR = join(homedir(), '.local/state/claude-limits');
 const UID = process.getuid?.() ?? 1000;
 export const DEFAULT_CGROUP_DIR = `/sys/fs/cgroup/user.slice/user-${UID}.slice/user@${UID}.service/claude.slice`;
 
-/** The text of a file, its last FILE_MAX bytes when it is longer; '' when it cannot be read. */
-async function tail(path: string): Promise<string> {
+interface Read {
+  /** The text, its last FILE_MAX bytes when the file is longer; '' when it cannot be read. */
+  text: string;
+  /** When the file was last written (ms); null when it cannot be read. */
+  mtime: number | null;
+}
+
+async function tail(path: string): Promise<Read> {
   try {
-    const size = (await stat(path)).size;
-    if (size <= FILE_MAX) return await readFile(path, 'utf8');
+    const st = await stat(path);
+    const mtime = Math.round(st.mtimeMs);
+    if (st.size <= FILE_MAX) return { text: await readFile(path, 'utf8'), mtime };
     const fh = await open(path, 'r');
     try {
       const buf = Buffer.alloc(FILE_MAX);
-      await fh.read(buf, 0, FILE_MAX, size - FILE_MAX);
-      return buf.toString('utf8');
+      await fh.read(buf, 0, FILE_MAX, st.size - FILE_MAX);
+      return { text: buf.toString('utf8'), mtime };
     } finally {
       await fh.close();
     }
   } catch {
-    return '';
+    return { text: '', mtime: null };
   }
 }
 
-type Accounts = Record<string, { email?: string; profile?: string }>;
+type Account = { email?: string; profile?: string };
+type Accounts = Record<string, Account>;
+
+/** An accounts entry that is one: an object. A null or a string is skipped. */
+const account = (v: unknown): Account | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Account) : null);
+
+/** The Lobby without its date: what a change is judged by, so that a date alone never counts as news. */
+const contentOf = ({ updatedAt: _at, ...rest }: Lobby): string => JSON.stringify(rest);
 
 /**
  * Reads Gordon's files every few seconds into one Lobby, and hands it on when it differs from the last. Read-only: it
@@ -93,7 +107,7 @@ export class GordonProvider implements GatekeeperProvider {
   private async once(): Promise<void> {
     try {
       const lobby = await this.read();
-      const text = JSON.stringify(lobby);
+      const text = contentOf(lobby);
       if (text !== this.last) {
         this.last = text;
         this.sink?.lobby(lobby);
@@ -108,7 +122,7 @@ export class GordonProvider implements GatekeeperProvider {
     }
   }
 
-  private file(name: string): Promise<string> {
+  private file(name: string): Promise<Read> {
     return tail(join(this.o.dir, name));
   }
 
@@ -119,13 +133,13 @@ export class GordonProvider implements GatekeeperProvider {
     } catch {
       return [];
     }
-    const docs = await Promise.all(names.map(async (n) => parseLimitDoc(await tail(join(this.limitsDir, n)))));
+    const docs = await Promise.all(names.map(async (n) => parseLimitDoc((await tail(join(this.limitsDir, n))).text)));
     return docs.filter((d): d is LimitDoc => d !== null);
   }
 
   private async read(): Promise<Lobby> {
     const now = this.now();
-    const [lobbyText, limitsText, watchdogText, accountsText, seatsLogText, orderText, tasksText, docs, power] = await Promise.all([
+    const reads = await Promise.all([
       this.file('lobby.json'),
       this.file('limits.json'),
       this.file('watchdog-stopgap.log'),
@@ -133,16 +147,21 @@ export class GordonProvider implements GatekeeperProvider {
       this.file('seats.jsonl'),
       this.file('seats-order.txt'),
       this.file('tasks.jsonl'),
-      this.limitDocs(),
-      readPower(this.cgroupDir),
     ]);
+    const [lobbyText, limitsText, watchdogText, accountsText, seatsLogText, orderText, tasksText] = reads.map((r) => r.text) as [string, string, string, string, string, string, string];
+    const [docs, power] = await Promise.all([this.limitDocs(), readPower(this.cgroupDir)]);
     const file = parseLobbyFile(lobbyText);
     const limits = parseLimits(limitsText);
     const watchdog = parseWatchdogTail(watchdogText);
     let accounts: Accounts = {};
     try {
       const parsed: unknown = JSON.parse(accountsText);
-      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) accounts = parsed as Accounts;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+        for (const [name, v] of Object.entries(parsed as Record<string, unknown>)) {
+          const a = account(v);
+          if (a) accounts[name] = a;
+        }
+      }
     } catch {
       // no accounts file: no seats
     }
@@ -152,15 +171,19 @@ export class GordonProvider implements GatekeeperProvider {
     const emailOfProfile = new Map(Object.values(accounts).flatMap((a) => (a.profile && a.email ? [[a.profile, a.email] as const] : [])));
     const queue = (file?.queue ?? []).map(({ profile, ...w }) => ({ ...w, account: profile ? (emailOfProfile.get(profile) ?? profile) : null }));
     this.announceTasks(parseTaskPanes(tasksText));
+    // The watchdog writes the cap it holds into limits.json: that file is the word on the hold, the log only when it cannot be read.
+    const held = limits.max !== null ? limits.max === 0 : watchdog.held;
+    // The Lobby is as old as the newest file read, unless lobby.json dates itself.
+    const newest = reads.map((r) => r.mtime).filter((m): m is number => m !== null);
     return {
       doorman: { name: 'Gordon' },
       gate: file?.gate ?? null,
       queue,
       seats,
       turnTo: seatTurn(seats),
-      power: power ? { ...power, held: watchdog.held || limits.max === 0, pausedPanes: watchdog.pausedPanes } : null,
+      power: power ? { ...power, held, pausedPanes: watchdog.pausedPanes } : null,
       cap: file || limits.max !== null ? { working: file?.working ?? null, max: limits.max } : null,
-      updatedAt: file?.updatedAt ?? now,
+      updatedAt: file?.updatedAt ?? (newest.length ? Math.max(...newest) : now),
     };
   }
 

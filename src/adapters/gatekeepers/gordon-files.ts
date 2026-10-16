@@ -68,10 +68,18 @@ const WATCHDOG = /WATCHDOG:/;
 const PAUSED = /pausa mandata a:\s*(.*)$/;
 const RELEASED = /pressione passata/;
 
-/** The watchdog's log: its last WATCHDOG line says whether launches are held and which panes it paused. */
+const STARTED = /\bavvio:/;
+
+/**
+ * The watchdog's log: its last WATCHDOG line says whether launches are held and which panes it paused. A start line
+ * after it means the watchdog came back with nothing held: what it paused before is forgotten.
+ */
 export function parseWatchdogTail(text: string): { pausedPanes: string[]; held: boolean } {
-  const last = text.split('\n').filter((l) => WATCHDOG.test(l)).at(-1);
-  if (!last || RELEASED.test(last)) return { pausedPanes: [], held: false };
+  const lines = text.split('\n');
+  let at = -1;
+  for (let i = lines.length - 1; i >= 0 && at === -1; i--) if (WATCHDOG.test(lines[i]!)) at = i;
+  const last = at === -1 ? undefined : lines[at];
+  if (!last || RELEASED.test(last) || lines.slice(at + 1).some((l) => STARTED.test(l))) return { pausedPanes: [], held: false };
   const panes = (PAUSED.exec(last)?.[1] ?? '').split(/\s+/).filter((p) => isPaneOf('herdr', p));
   return { pausedPanes: panes, held: /lanci fermati/.test(last) };
 }
@@ -129,19 +137,21 @@ function shortName(seat: string): string {
 
 /**
  * One seat per account in the accounts file: those in the rota first, in its order, then the rest. A seat is full when
- * either window is at the limit, stale when a window has no fresh reading. Every seat takes turns but the personal
+ * either window is at the limit, stale when its week has no fresh reading. Every seat takes turns but the personal
  * account (profile 'personal'): the rota is an order of preference among colleagues, and the owner's own seat, which it
  * leaves out, is still a seat the team turns to.
  */
 export function buildSeats(docs: readonly LimitDoc[], accounts: Record<string, { email?: string; profile?: string }>, order: readonly string[], current: string | null, now: number): Seat[] {
   const byEmail = new Map(docs.map((d) => [d.email, d]));
   const names = [...order.filter((n) => n in accounts), ...Object.keys(accounts).filter((n) => !order.includes(n))];
+  // A window whose reset has passed is empty now, whatever its last reading said (the `turni` band reads it so too).
+  const asOfNow = (a: Allowance | null): Allowance | null => (a && a.resetsAt !== null && a.resetsAt <= now ? { ...a, usedPct: 0 } : a);
   return names.flatMap((name): Seat[] => {
     const email = accounts[name]?.email;
     if (!email) return [];
     const doc = byEmail.get(email);
-    const session = doc?.session ?? null;
-    const week = doc?.week ?? null;
+    const session = asOfNow(doc?.session ?? null);
+    const week = asOfNow(doc?.week ?? null);
     return [{
       account: email,
       name: shortName(name),
@@ -149,7 +159,8 @@ export function buildSeats(docs: readonly LimitDoc[], accounts: Record<string, {
       week,
       current: name === current,
       full: (session?.usedPct ?? 0) >= SEAT_LIMIT_PCT || (week?.usedPct ?? 0) >= SEAT_LIMIT_PCT,
-      stale: allowanceStale(session, now) || allowanceStale(week, now),
+      // The status line writes only the windows the API returns: no five-hour window means no usage, not no reading.
+      stale: allowanceStale(week, now),
       turnable: accounts[name]?.profile !== 'personal',
     }];
   });

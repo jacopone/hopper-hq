@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, rm, stat, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { GordonProvider } from '../../src/adapters/gatekeepers/gordon.js';
@@ -52,7 +52,7 @@ describe('GordonProvider', () => {
     // The rota first, then the rest; the owner's seat takes turns, the personal account does not.
     expect(l.seats.map((x) => [x.name, x.current, x.turnable])).toEqual([['Leonardo', false, true], ['Jacopo', true, true], ['Personale', false, false]]);
     expect(l.turnTo).toBe('leonardo@example.com');
-    expect(l.power).toEqual({ usedBytes: 17650155520, maxBytes: 48001552384, warnPct: 85, held: true, pausedPanes: ['wE:p1E', 'wK:p2'] });
+    expect(l.power).toEqual({ usedBytes: 17650155520, maxBytes: 48001552384, warnPct: 85, held: false, pausedPanes: ['wE:p1E', 'wK:p2'] });
     expect(l.cap).toEqual({ working: 6, max: 7 });
     expect(l.doorman).toEqual({ name: 'Gordon' });
     expect(l.updatedAt).toBe(Date.parse('2026-10-16T14:02:11+02:00'));
@@ -76,6 +76,53 @@ describe('GordonProvider', () => {
     await rm(join(s.dir, 'lobby.json'));
     await p.poll();
     expect(out.lobbies).toHaveLength(1);
+    p.stop();
+  });
+
+  it('without lobby.json reports once, dates the Lobby by the newest file read, and says nothing again while nothing changes', async () => {
+    const s = await state();
+    await rm(join(s.dir, 'lobby.json'));
+    const out = sink();
+    let now = NOW;
+    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => now });
+    p.start(out.sink, 60_000);
+    await p.poll();
+    now += 5000;
+    await p.poll();
+    now += 5000;
+    await p.poll();
+    expect(out.lobbies).toHaveLength(1);
+    const newest = Math.max(...(await Promise.all(['limits.json', 'watchdog-stopgap.log', 'seats-accounts.json', 'seats.jsonl', 'seats-order.txt', 'tasks.jsonl'].map(async (f) => (await stat(join(s.dir, f))).mtimeMs))));
+    expect(out.lobbies[0]!.updatedAt).toBe(Math.round(newest));
+    p.stop();
+  });
+
+  it('skips an account entry that is not one, and keeps the other seats', async () => {
+    const s = await state();
+    await writeFile(join(s.dir, 'seats-accounts.json'), JSON.stringify({ Broken: null, 'Leonardo Davinci': { email: 'leonardo@example.com', profile: 'leonardo' } }));
+    const out = sink();
+    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => NOW });
+    p.start(out.sink, 60_000);
+    await p.poll();
+    expect(out.lobbies[0]!.seats.map((x) => x.name)).toEqual(['Leonardo']);
+    expect(out.lobbies[0]!.queue[0]!.account).toBe('leonardo@example.com');
+    p.stop();
+  });
+
+  it('takes the hold from limits.json when it can be read, and from the watchdog log only when it cannot', async () => {
+    const s = await state();
+    const out = sink();
+    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => NOW });
+    p.start(out.sink, 60_000);
+    // The log's last WATCHDOG line still says held; limits.json says 7: the cap was restored.
+    await p.poll();
+    expect(out.lobbies.at(-1)!.power!.held).toBe(false);
+    await writeFile(join(s.dir, 'limits.json'), '{"sessions_max": 0}');
+    await p.poll();
+    expect(out.lobbies.at(-1)!.power!.held).toBe(true);
+    await rm(join(s.dir, 'limits.json'));
+    await p.poll();
+    expect(out.lobbies.at(-1)!.power!.held).toBe(true);
     p.stop();
   });
 

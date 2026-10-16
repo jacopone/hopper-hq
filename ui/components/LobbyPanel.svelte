@@ -31,7 +31,7 @@
   const seatLine = (s: SeatRow) =>
     !s.session && !s.week
       ? `${s.name} no fresh reading`
-      : `${s.name} 5h ${Math.round(s.session?.usedPct ?? 0)}% · 7d ${Math.round(s.week?.usedPct ?? 0)}%${s.full ? ' · full' : ''}${s.stale ? ' · stale' : ''}`;
+      : `${s.name} 5h ${s.session ? `${Math.round(s.session.usedPct)}%` : '–'} · 7d ${s.week ? `${Math.round(s.week.usedPct)}%` : '–'}${s.full ? ' · full' : ''}${s.stale ? ' · stale' : ''}`;
   const gauge = (p: NonNullable<LobbyDetail['power']>) =>
     `${gib(p.usedBytes)} / ${p.maxBytes === null ? 'no cap' : `${gib(p.maxBytes)} GiB (${pct(p.usedBytes, p.maxBytes)}%)`} · mark ${p.warnPct}%`;
   const pausedLabel = (p: PausedSession) => `${p.name ?? 'a session'} (${p.pane})`;
