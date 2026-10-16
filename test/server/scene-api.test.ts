@@ -73,3 +73,20 @@ describe('GET /api/floor', () => {
     expect((await call(port, { path: `/api/floor?key=${encodeURIComponent(floorOf('shop-web'))}` })).status).toBe(401);
   });
 });
+
+describe('GET /api/lobby', () => {
+  it('answers 404 without a gatekeeper, and the detail with one, to the token and the cookie', async () => {
+    expect((await call(port, { path: '/api/lobby', headers: bearer(TOKEN) })).status).toBe(404);
+    collector.setLobby({ doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: NOW });
+    try {
+      for (const headers of [bearer(TOKEN), { cookie }]) {
+        const r = await call(port, { path: '/api/lobby', headers });
+        expect(r.status).toBe(200);
+        expect(r.json).toEqual(collector.lobbyDetail());
+      }
+      expect((await call(port, { path: '/api/lobby' })).status).toBe(401);
+    } finally {
+      collector.setLobby(null);
+    }
+  });
+});

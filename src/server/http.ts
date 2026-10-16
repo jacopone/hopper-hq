@@ -87,6 +87,7 @@ function routes(d: Deps): Route[] {
     { methods: POST, path: '/api/shutdown', auth: 'bearer', run: ({ res }) => postShutdown(d, res) },
     { methods: GET, path: '/api/scene', auth: 'read', run: ({ res }) => send(res, 200, d.collector.scene()) },
     { methods: GET, path: '/api/floor', auth: 'read', run: (c) => getFloor(d, c) },
+    { methods: GET, path: '/api/lobby', auth: 'read', run: ({ res }) => getLobby(d, res) },
     { methods: GET, path: '/api/events', auth: 'read', run: (c) => getEvents(d, c) },
     { methods: POST, path: '/api/focus', auth: 'write', run: (c) => postFocus(d, c) },
     { methods: POST, path: '/api/seen', auth: 'write', run: ({ res }) => send(res, 200, { marked: d.collector.markAllSeen() }) },
@@ -224,6 +225,13 @@ function getFloor(d: Deps, { res, url }: Ctx): void {
   const floor = d.collector.floor(key);
   if (!floor) return send(res, 404, { error: 'No such floor' });
   send(res, 200, floor);
+}
+
+/** The gatekeeper's Lobby in detail; 404 when no gatekeeper is configured. */
+function getLobby(d: Deps, res: ServerResponse): void {
+  const lobby = d.collector.lobbyDetail();
+  if (!lobby) return send(res, 404, { error: 'No gatekeeper is configured' });
+  send(res, 200, lobby);
 }
 
 /**
