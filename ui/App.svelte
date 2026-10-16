@@ -1,8 +1,8 @@
 <script lang="ts">
   import { onDestroy, tick, untrack } from 'svelte';
-  import type { AttentionEntry } from '../src/scene/types';
+  import type { AttentionEntry, LobbyDetail } from '../src/scene/types';
   import type { Target } from './renderer/index';
-  import { SIGNED_OUT, focusSession, markSeen } from './lib/api';
+  import { SIGNED_OUT, fetchLobby, focusSession, markSeen } from './lib/api';
   import { loadRenderer, type RendererModule } from './lib/renderer';
   import { parseHash, toHash, type Route } from './lib/route';
   import { occupantsOf } from './lib/occupants';
@@ -16,6 +16,7 @@
   import Facade from './components/Facade.svelte';
   import FloorPanel from './components/FloorPanel.svelte';
   import FloorStage from './components/FloorStage.svelte';
+import LobbyPanel from './components/LobbyPanel.svelte';
   import Notice from './components/Notice.svelte';
   import RunPanel from './components/RunPanel.svelte';
   import Toast from './components/Toast.svelte';
@@ -29,7 +30,7 @@
     store?: ClientStore;
     storage?: Pick<Storage, 'getItem' | 'setItem' | 'removeItem'> | null;
     prefersDark?: boolean;
-    api?: { focusSession: typeof focusSession; markSeen: typeof markSeen };
+    api?: Partial<{ focusSession: typeof focusSession; markSeen: typeof markSeen; fetchLobby: typeof fetchLobby }>;
     now?: () => number;
     /** Loads the 3D floor renderer, the first time a floor opens. */
     renderer?: () => Promise<RendererModule>;
@@ -40,7 +41,7 @@
     store: props.store ?? createClientStore(browserStoreDeps()),
     storage: props.storage === undefined ? browserStorage() : props.storage,
     prefersDark: props.prefersDark ?? systemPrefersDark(),
-    api: props.api ?? { focusSession, markSeen },
+    api: { focusSession, markSeen, fetchLobby, ...props.api },
     now: props.now ?? Date.now,
     renderer: props.renderer ?? loadRenderer,
   }));
@@ -54,12 +55,32 @@
   let theme = $state(loadTheme(storage));
   let systemDark = $state(deps.prefersDark);
   let clock = $state(now());
+  /** The Lobby's detail while its route is open: undefined while loading, null when there is no gatekeeper. */
+  let lobbyDetail: LobbyDetail | null | undefined = $state(undefined);
   let stage: HTMLElement | undefined = $state();
   let panel: HTMLElement | undefined = $state();
   /** The element that last had focus, and the attention chip it sat in, for when an update takes it away. */
   let lastFocus: { el: Element; group: Element | null; index: number } | null = null;
 
   $effect(() => store.watchFloor(route.floor));
+  // The Lobby is asked for while its route is open, now and every five seconds: it has no live stream yet.
+  $effect(() => {
+    if (!route.lobby) return;
+    lobbyDetail = undefined;
+    let lastError: string | null = null;
+    const ask = async () => {
+      const result = await api.fetchLobby();
+      if (result.ok) lobbyDetail = result.lobby;
+      else if (result.status === 404) lobbyDetail = null;
+      else if (result.error !== lastError) {
+        lastError = result.error;
+        toasts.show(result.error, 'error');
+      }
+    };
+    void ask();
+    const timer = setInterval(() => void ask(), 5000);
+    return () => clearInterval(timer);
+  });
   // Before the components' effects: the floor stage reads its colours from <html> once the theme is set there.
   $effect.pre(() => applyTheme(document.documentElement, theme));
   $effect(() => watchSystemTheme((dark) => (systemDark = dark)));
@@ -91,9 +112,10 @@
   );
 
   const crumbs = $derived.by((): Crumb[] => {
-    const list: Crumb[] = [{ label: 'Building', route: { floor: null, desk: null, run: null } }];
+    const list: Crumb[] = [{ label: 'Building', route: { floor: null, desk: null, run: null, lobby: false } }];
+    if (route.lobby) return [...list, { label: 'Lobby', route }];
     if (route.floor === null) return list;
-    list.push({ label: summary ? `${summary.number} · ${summary.name}` : 'Floor', route: { floor: route.floor, desk: null, run: null } });
+    list.push({ label: summary ? `${summary.number} · ${summary.name}` : 'Floor', route: { floor: route.floor, desk: null, run: null, lobby: false } });
     if (route.desk !== null) {
       const name = desk?.name ?? [...(scene?.attention.needsYou ?? []), ...(scene?.attention.done ?? [])].find((e) => e.sessionId === route.desk)?.name;
       list.push({ label: name ?? 'Desk', route });
@@ -104,8 +126,8 @@
   });
 
   function navigate(next: Route): void {
-    const to = next.floor === null ? { floor: null, desk: null, run: null } : next;
-    const moved = to.floor !== route.floor || to.desk !== route.desk || to.run !== route.run;
+    const to: Route = next.floor === null ? { floor: null, desk: null, run: null, lobby: next.lobby } : { ...next, lobby: false };
+    const moved = to.floor !== route.floor || to.desk !== route.desk || to.run !== route.run || to.lobby !== route.lobby;
     route = to;
     const hash = toHash(route);
     if (location.hash !== hash) location.hash = hash;
@@ -114,7 +136,7 @@
 
   function onHashChange(): void {
     const next = parseHash(location.hash);
-    if (next.floor === route.floor && next.desk === route.desk && next.run === route.run) return;
+    if (next.floor === route.floor && next.desk === route.desk && next.run === route.run && next.lobby === route.lobby) return;
     route = next;
     void followMove();
   }
@@ -168,8 +190,8 @@
   /** Esc goes up one level: desk or run, floor, building. */
   function onKeydown(e: KeyboardEvent): void {
     if (e.key !== 'Escape' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
-    if (route.desk !== null || route.run !== null) navigate({ floor: route.floor, desk: null, run: null });
-    else if (route.floor !== null) navigate({ floor: null, desk: null, run: null });
+    if (route.desk !== null || route.run !== null) navigate({ floor: route.floor, desk: null, run: null, lobby: false });
+    else if (route.floor !== null) navigate({ floor: null, desk: null, run: null, lobby: false });
   }
 
   /** Leaving the page frees its connection at once. A page the browser brings back from its back-forward cache starts afresh. */
@@ -218,7 +240,7 @@
   }
 
   function openEntry(entry: AttentionEntry): void {
-    navigate({ floor: entry.floorKey, desk: entry.sessionId, run: null });
+    navigate({ floor: entry.floorKey, desk: entry.sessionId, run: null, lobby: false });
   }
 </script>
 
@@ -248,8 +270,10 @@
             <Facade
               floors={scene.floors}
               selected={null}
-              onFloor={(key) => navigate({ floor: key, desk: null, run: null })}
-              onDesk={(key, id) => navigate({ floor: key, desk: id, run: null })}
+              lobby={scene.lobby}
+              onFloor={(key) => navigate({ floor: key, desk: null, run: null, lobby: false })}
+              onDesk={(key, id) => navigate({ floor: key, desk: id, run: null, lobby: false })}
+              onLobby={() => navigate({ floor: null, desk: null, run: null, lobby: true })}
             />
             <p class="hint">{scene.floors.length > 0 ? 'Click a floor to go inside, or a window to open its desk.' : 'No sessions yet.'}</p>
           {/if}
@@ -263,7 +287,7 @@
               theme={resolvedTheme(theme, systemDark)}
               load={renderer}
               onSelect={(picked) =>
-                navigate({ floor: route.floor, desk: picked?.kind === 'desk' ? picked.id : null, run: picked?.kind === 'room' ? picked.id : null })}
+                navigate({ floor: route.floor, desk: picked?.kind === 'desk' ? picked.id : null, run: picked?.kind === 'room' ? picked.id : null, lobby: false })}
               onActivate={focus}
             />
           {/key}
@@ -272,27 +296,37 @@
         {/if}
       </section>
       <aside class="panel" aria-label="Details" bind:this={panel}>
-        {#if route.floor === null}
+        {#if route.lobby}
+          <LobbyPanel
+            lobby={lobbyDetail}
+            now={clock}
+            onBack={() => navigate({ floor: null, desk: null, run: null, lobby: false })}
+            onDesk={(id) => {
+              const key = scene?.floors.find((f) => f.windows.some((w) => w.sessionId === id))?.key;
+              if (key) navigate({ floor: key, desk: id, run: null, lobby: false });
+            }}
+          />
+        {:else if route.floor === null}
           {#if scene}
-            <BuildingPanel floors={scene.floors} onFloor={(key) => navigate({ floor: key, desk: null, run: null })} />
+            <BuildingPanel floors={scene.floors} onFloor={(key) => navigate({ floor: key, desk: null, run: null, lobby: false })} />
           {/if}
         {:else if desk && floor}
           <DeskPanel
             {desk}
             {floor}
             now={clock}
-            onBack={() => navigate({ floor: route.floor, desk: null, run: null })}
+            onBack={() => navigate({ floor: route.floor, desk: null, run: null, lobby: false })}
             onGo={focus}
             onSeen={seen}
-            onRun={(runId) => navigate({ floor: route.floor, desk: null, run: runId })}
+            onRun={(runId) => navigate({ floor: route.floor, desk: null, run: runId, lobby: false })}
           />
         {:else if route.run !== null && floor}
           <RunPanel
             {floor}
             runId={route.run}
             now={clock}
-            onBack={() => navigate({ floor: route.floor, desk: null, run: null })}
-            onDesk={(id) => navigate({ floor: route.floor, desk: id, run: null })}
+            onBack={() => navigate({ floor: route.floor, desk: null, run: null, lobby: false })}
+            onDesk={(id) => navigate({ floor: route.floor, desk: id, run: null, lobby: false })}
             onGo={focus}
           />
         {:else}
@@ -301,9 +335,9 @@
             {floor}
             selected={route.desk}
             now={clock}
-            onDesk={(id) => navigate({ floor: route.floor, desk: id, run: null })}
-            onBack={() => navigate({ floor: null, desk: null, run: null })}
-            onRun={(runId) => navigate({ floor: route.floor, desk: null, run: runId })}
+            onDesk={(id) => navigate({ floor: route.floor, desk: id, run: null, lobby: false })}
+            onBack={() => navigate({ floor: null, desk: null, run: null, lobby: false })}
+            onRun={(runId) => navigate({ floor: route.floor, desk: null, run: runId, lobby: false })}
           />
         {/if}
       </aside>

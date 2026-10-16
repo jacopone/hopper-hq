@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { focusSession, markSeen } from '../../lib/api';
+import { SIGNED_OUT, fetchLobby, focusSession, markSeen } from '../../lib/api';
 
 function answer(status: number, body: unknown): Response {
   return new Response(body === undefined ? null : typeof body === 'string' ? body : JSON.stringify(body), { status });
@@ -88,5 +88,15 @@ describe('session ids', () => {
       expect(await focusSession(id, fetch), id).toEqual({ ok: false, status: 0, error: 'No such session' });
     }
     expect(fetch).not.toHaveBeenCalled();
+  });
+});
+
+describe('fetchLobby', () => {
+  it('returns the detail, says when there is no gatekeeper, and never rejects', async () => {
+    const detail = { version: 7, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: 1 };
+    expect(await fetchLobby(async () => answer(200, detail))).toEqual({ ok: true, lobby: detail });
+    expect(await fetchLobby(async () => answer(404, { error: 'No gatekeeper is configured' }))).toEqual({ ok: false, status: 404, error: 'No gatekeeper is configured' });
+    expect(await fetchLobby(async () => answer(401, undefined))).toEqual({ ok: false, status: 401, error: SIGNED_OUT });
+    expect(await fetchLobby(async () => { throw new Error('down'); })).toEqual({ ok: false, status: 0, error: 'The daemon is not answering' });
   });
 });

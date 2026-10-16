@@ -1,7 +1,7 @@
 /** The UI's wording: one place for state names, their meaning, wait reasons, floor metadata and plurals. */
 import type { RunStatus, WaitKind } from '../../src/core/types';
 import { formatAgo, reasonText } from '../../src/scene/text';
-import type { DeskSummary, FloorSummary, PhaseState, RunSummary, SceneReason, ShownState } from '../../src/scene/types';
+import type { DeskSummary, FloorSummary, LobbySummary, PhaseState, RunSummary, SceneReason, ShownState } from '../../src/scene/types';
 
 export const STATES: Record<ShownState, { label: string; description: string }> = {
   needs_you: { label: 'Needs you', description: 'Blocked on a permission, a question or a plan approval.' },
@@ -114,4 +114,20 @@ export const PHASE: Record<PhaseState, { mark: string; word: string }> = {
 /** A summary line's age, and in words whether a prompt came after it: '2m ago', '2m ago (older than the last prompt)'. */
 export function summaryAge(summary: DeskSummary, now: number): string {
   return `${formatAgo(now - summary.at)} ago${summary.stale ? ' (older than the last prompt)' : ''}`;
+}
+
+/** What the façade's Lobby label says: the counts worth a glance, nothing when all is quiet. */
+export function lobbyMeta(l: LobbySummary): Meta[] {
+  const metas: Meta[] = [];
+  if (l.waiting) metas.push({ text: `${l.waiting} waiting`, tone: 'needs' });
+  if (l.seatsFull) metas.push({ text: plural(l.seatsFull, 'seat full', 'seats full'), tone: 'nosignal' });
+  if (l.powerPct !== null) metas.push({ text: `power ${l.powerPct}%`, tone: l.powerPct >= 85 ? 'needs' : null });
+  if (l.held) metas.push({ text: 'launches held', tone: 'needs' });
+  return metas;
+}
+
+/** The Lobby for a screen reader: 'Lobby: 3 waiting, 1 seat full, power 75%, launches held'. */
+export function lobbyLabel(l: LobbySummary): string {
+  const parts = lobbyMeta(l).map((m) => m.text);
+  return parts.length ? `Lobby: ${parts.join(', ')}` : 'Lobby';
 }

@@ -22,14 +22,14 @@ describe('StatePill', () => {
 
 describe('TopBar', () => {
   it('says the building is provided by FairMind, with a link that opens apart from the page', () => {
-    const target = render(TopBar, { crumbs: [{ label: 'Building', route: { floor: null, desk: null, run: null } }], needsYou: 0, done: 0, theme: 'system', resolved: 'day', onNavigate: () => {}, onTheme: () => {} });
+    const target = render(TopBar, { crumbs: [{ label: 'Building', route: { floor: null, desk: null, run: null, lobby: false } }], needsYou: 0, done: 0, theme: 'system', resolved: 'day', onNavigate: () => {}, onTheme: () => {} });
     const credit = target.querySelector('a.credit')!;
     expect([text(credit), credit.getAttribute('href'), credit.getAttribute('target'), credit.getAttribute('rel')]).toEqual(['by FairMind', 'https://fairmind.ai', '_blank', 'noopener noreferrer']);
   });
 });
 
 describe('TopBar terminal badge', () => {
-  const base = () => ({ crumbs: [{ label: 'Building', route: { floor: null, desk: null, run: null } }], needsYou: 1, done: 2, theme: 'system' as const, resolved: 'day' as const, onNavigate: () => {}, onTheme: () => {} });
+  const base = () => ({ crumbs: [{ label: 'Building', route: { floor: null, desk: null, run: null, lobby: false } }], needsYou: 1, done: 2, theme: 'system' as const, resolved: 'day' as const, onNavigate: () => {}, onTheme: () => {} });
 
   it('names tmux and its status line counts by default', () => {
     const target = render(TopBar, { ...base() });

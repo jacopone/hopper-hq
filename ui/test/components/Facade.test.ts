@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
 import Facade from '../../components/Facade.svelte';
 import source from '../../components/Facade.svelte?raw';
-import { CHECKOUT, DOCS, ORDERS, makeScene } from '../helpers/fixtures';
+import { CHECKOUT, DOCS, NOW, ORDERS, makeScene } from '../helpers/fixtures';
 import { cleanup, render, text } from '../helpers/render';
 
 afterEach(cleanup);
@@ -10,12 +10,26 @@ afterEach(cleanup);
 function facade(floors = makeScene().floors, selected: string | null = null) {
   const onFloor = vi.fn();
   const onDesk = vi.fn();
-  const target = render(Facade, { floors, selected, onFloor, onDesk });
+  const target = render(Facade, { floors, selected, lobby: null, onFloor, onDesk, onLobby: vi.fn() });
   const floor = (n: number) => target.querySelectorAll('g.floor')[n]!;
   return { target, onFloor, onDesk, floor };
 }
 
 describe('Facade', () => {
+  it('makes the Lobby a button with its counts when a gatekeeper is configured, and leaves it as decor without', () => {
+    const onLobby = vi.fn();
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { waiting: 3, seatsFull: 1, powerPct: 75, held: true, paused: 2, updatedAt: NOW }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    const lobby = target.querySelector('g.lobby')!;
+    expect(lobby.getAttribute('role')).toBe('button');
+    expect(lobby.getAttribute('aria-label')).toBe('Lobby: 3 waiting, 1 seat full, power 75%, launches held');
+    expect([...lobby.querySelectorAll('.t-meta tspan')].map(text)).toEqual(['3 waiting', '1 seat full', 'power 75%', 'launches held']);
+    lobby.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onLobby).toHaveBeenCalled();
+    cleanup();
+    const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    expect(plain.querySelector('g.lobby')!.getAttribute('role')).toBeNull();
+  });
+
   it('draws one floor button per floor, bottom-up, each named for a screen reader', () => {
     const { target } = facade();
     expect([...target.querySelectorAll('g.floor')].map((g) => g.getAttribute('aria-label'))).toEqual([

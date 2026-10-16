@@ -55,6 +55,13 @@ describe('DeskPanel', () => {
     expect(text([...off.target.querySelectorAll('.p-note')].at(-1))).toBe('It does not run in a herdr pane, so there is nowhere to go.');
   });
 
+  it('names the task the desk works on, when it has one', () => {
+    const { facts } = panel(CHECKOUT, 'oa-c3', NOW, (d) => (d.task = 'G-268'));
+    expect(facts().Task).toBe('G-268');
+    cleanup();
+    expect(panel(CHECKOUT, 'oa-c3').facts().Task).toBeUndefined();
+  });
+
   it('names the account the session runs under, in the eyebrow and among the facts, when it carries one', () => {
     const { target, facts } = panel(CHECKOUT, 'oa-c3', NOW, (d) => (d.account = 'work@example.com'));
     expect(text(target.querySelector('.eyebrow'))).toBe('orders-api · work@example.com · tmux pane %7');

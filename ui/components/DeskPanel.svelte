@@ -78,6 +78,10 @@
     <dt>Account</dt>
     <dd>{desk.account}</dd>
   {/if}
+  {#if desk.task}
+    <dt>Task</dt>
+    <dd>{desk.task}</dd>
+  {/if}
   <dt>Repo</dt>
   <dd>{desk.checkout.repo}</dd>
   <dt>Branch</dt>

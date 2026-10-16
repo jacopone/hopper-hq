@@ -1,8 +1,8 @@
 <script lang="ts">
   import { cleanText } from '../../src/scene/text';
-  import type { FloorSummary } from '../../src/scene/types';
+  import type { FloorSummary, LobbySummary } from '../../src/scene/types';
   import { MIN_SCALE, NAME_MAX, facadeOf, type Box, type Label } from '../facade/geometry';
-  import { STATES, floorLabel, floorMeta, type Meta } from '../lib/words';
+  import { STATES, floorLabel, floorMeta, lobbyLabel, lobbyMeta, type Meta } from '../lib/words';
 
   /**
    * The building from outside: one window per desk of each floor's plan, coloured by the state of whoever sits there and
@@ -18,8 +18,17 @@
     selected: string | null;
     onFloor: (key: string) => void;
     onDesk: (floorKey: string, sessionId: string) => void;
+    /** The gatekeeper's Lobby; null when none is configured, and the ground floor is decor. */
+    lobby?: LobbySummary | null;
+    onLobby?: () => void;
   }
-  let { floors, selected, onFloor, onDesk }: Props = $props();
+  let { floors, selected, onFloor, onDesk, lobby = null, onLobby = () => {} }: Props = $props();
+
+  function pressLobby(e: KeyboardEvent): void {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    onLobby();
+  }
 
   const model = $derived(facadeOf(floors));
   const byKey = $derived(new Map(floors.map((f) => [f.key, f])));
@@ -66,13 +75,24 @@
 >
   <ellipse class="ground-shadow" cx={model.shadow.cx} cy={model.shadow.cy} rx={model.shadow.rx} ry={model.shadow.ry} />
   {@render solid(model.plinth, 'plinth')}
-  <g class="lobby">
-    {@render solid(model.lobby.wall, 'wall')}
-    {#each model.lobby.windows as quad, i (i)}<polygon class="sfill st-empty" points={quad} />{/each}
-    {#each model.lobby.doors as quad, i (i)}<polygon class="door" points={quad} />{/each}
-    <polygon class="sfill st-empty" points={model.lobby.side} />
-    {@render label(model.lobby.label, 'L', 'Lobby', [])}
-  </g>
+  {#if lobby}
+    <g class="lobby floor" role="button" tabindex="0" aria-label={lobbyLabel(lobby)} onclick={() => onLobby()} onkeydown={pressLobby}>
+      <title>Lobby</title>
+      {@render solid(model.lobby.wall, 'wall')}
+      {#each model.lobby.windows as quad, i (i)}<polygon class="sfill st-empty" points={quad} />{/each}
+      {#each model.lobby.doors as quad, i (i)}<polygon class="door" points={quad} />{/each}
+      <polygon class="sfill st-empty" points={model.lobby.side} />
+      {@render label(model.lobby.label, 'L', 'Lobby', lobbyMeta(lobby))}
+    </g>
+  {:else}
+    <g class="lobby">
+      {@render solid(model.lobby.wall, 'wall')}
+      {#each model.lobby.windows as quad, i (i)}<polygon class="sfill st-empty" points={quad} />{/each}
+      {#each model.lobby.doors as quad, i (i)}<polygon class="door" points={quad} />{/each}
+      <polygon class="sfill st-empty" points={model.lobby.side} />
+      {@render label(model.lobby.label, 'L', 'Lobby', [])}
+    </g>
+  {/if}
   {#each model.floors as floor (floor.key)}
     {@const summary = byKey.get(floor.key)!}
     <g

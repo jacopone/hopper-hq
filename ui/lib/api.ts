@@ -4,6 +4,7 @@
  * Paths are absolute: the page lives under /ui/.
  */
 import { cleanText, isSessionId } from '../../src/scene/text';
+import type { LobbyDetail } from '../../src/scene/types';
 
 export type FocusResult = { ok: true; pane: string; simulated: boolean } | { ok: false; status: number; error: string };
 
@@ -49,4 +50,21 @@ export async function markSeen(sessionId: string, fetchFn: Fetch = fetch, signed
   } catch {
     return false;
   }
+}
+
+export type LobbyResult = { ok: true; lobby: LobbyDetail } | { ok: false; status: number; error: string };
+
+/** The Lobby in detail. 404 means no gatekeeper is configured; the panel says so. Never rejects. */
+export async function fetchLobby(fetchFn: Fetch = fetch): Promise<LobbyResult> {
+  let res: Response;
+  try {
+    res = await fetchFn('/api/lobby', { credentials: 'same-origin' });
+  } catch {
+    return { ok: false, status: 0, error: 'The daemon is not answering' };
+  }
+  if (res.status === 401) return { ok: false, status: 401, error: SIGNED_OUT };
+  const body = (await res.json().catch(() => null)) as (LobbyDetail & { error?: unknown }) | null;
+  if (res.ok && body && typeof body.updatedAt === 'number' && Array.isArray(body.seats)) return { ok: true, lobby: body };
+  const error = typeof body?.error === 'string' ? cleanText(body.error) : '';
+  return { ok: false, status: res.status, error: error || `The daemon answered ${res.status}` };
 }

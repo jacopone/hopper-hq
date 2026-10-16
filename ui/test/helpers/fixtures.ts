@@ -44,6 +44,7 @@ interface DeskSpec {
   agents?: number;
   location?: 'local' | 'cloud';
   account?: string;
+  task?: string;
 }
 interface CheckoutSpec {
   repo: string;
@@ -263,6 +264,7 @@ function occupantOf(f: FloorSpec, c: CheckoutSpec, d: DeskSpec): Occupant {
     runs: [],
     location: d.location ?? 'local',
     account: d.account ?? null,
+    task: d.task ?? null,
     pane: d.pane,
     focusable: focusable(d),
     robot: look && {
@@ -303,7 +305,7 @@ function summary(f: FloorSpec, number: number): FloorSummary {
 }
 
 function entry(f: FloorSpec, c: CheckoutSpec, d: DeskSpec, state: 'needs_you' | 'done'): AttentionEntry {
-  return { sessionId: d.id, floorKey: f.key, name: d.name, repo: c.repo, account: d.account ?? null, state, since: d.since, reason: d.reason ?? null, title: d.title, focusable: focusable(d), summary: null };
+  return { sessionId: d.id, floorKey: f.key, name: d.name, repo: c.repo, account: d.account ?? null, task: d.task ?? null, state, since: d.since, reason: d.reason ?? null, title: d.title, focusable: focusable(d), summary: null };
 }
 
 export function makeScene(): BuildingScene {
@@ -317,6 +319,7 @@ export function makeScene(): BuildingScene {
   return {
     version: SCENE_VERSION,
     terminal: { kind: 'tmux', reachable: null, mapped: local.filter((x) => focusable(x.d)).length, local: local.length },
+    lobby: null,
     floors: FLOORS.map((f, i) => summary(f, FLOORS.length - i)),
     attention: { needsYou: queue('needs_you'), done: queue('done') },
   };
