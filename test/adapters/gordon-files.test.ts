@@ -1,0 +1,137 @@
+import { describe, expect, it } from 'vitest';
+import { mkdtemp, writeFile } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import {
+  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readPower, timeOf,
+} from '../../src/adapters/gatekeepers/gordon-files.js';
+
+const NOW = Date.parse('2026-10-16T14:02:30+02:00');
+
+describe('timeOf', () => {
+  it('reads ISO strings and epoch seconds, and nothing else', () => {
+    expect(timeOf('2026-10-16T14:02:11+02:00')).toBe(Date.parse('2026-10-16T14:02:11+02:00'));
+    expect(timeOf(1792150178)).toBe(1792150178_000);
+    for (const v of ['soon', '', null, undefined, {}, -1]) expect(timeOf(v)).toBeNull();
+  });
+});
+
+describe('parseLobbyFile', () => {
+  const text = JSON.stringify({
+    updated_at: '2026-10-16T14:02:11+02:00',
+    gate: { verdict: 'ASPETTA', text: "ASPETTA: slice delle sessioni al 84% del tetto (watchdog all'85%); ultimo avvio 40 s fa (uno ogni 120 s);", at: '2026-10-16T14:02:11+02:00' },
+    waiting: [
+      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: '2026-10-16T13:58:00+02:00', reason: "slice delle sessioni al 84% del tetto (watchdog all'85%)" },
+      { id: 'G-271', name: 'G-271 medic v2', since: 1792150000 },
+      { name: 'no id: skipped' },
+    ],
+    working: 6,
+  });
+
+  it('reads the gate, the queue and the working count', () => {
+    const l = parseLobbyFile(text)!;
+    expect(l.updatedAt).toBe(Date.parse('2026-10-16T14:02:11+02:00'));
+    expect(l.gate).toEqual({
+      go: false,
+      text: "ASPETTA: slice delle sessioni al 84% del tetto (watchdog all'85%); ultimo avvio 40 s fa (uno ogni 120 s);",
+      reasons: [
+        { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" },
+        { kind: 'pacing', text: 'ultimo avvio 40 s fa (uno ogni 120 s)' },
+      ],
+      at: Date.parse('2026-10-16T14:02:11+02:00'),
+    });
+    expect(l.queue).toEqual([
+      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" } },
+      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null },
+    ]);
+    expect(l.working).toBe(6);
+  });
+
+  it('reads a VIA verdict as go with no reasons, and is null for anything that is not the file', () => {
+    expect(parseLobbyFile(JSON.stringify({ gate: { verdict: 'VIA', text: 'VIA: memoria 34 GB, slice 72%' } }))).toMatchObject({ gate: { go: true, reasons: [] }, queue: [], working: null, updatedAt: null });
+    for (const bad of ['', '{', '[]', 'null', '"x"']) expect(parseLobbyFile(bad)).toBeNull();
+    expect(parseLobbyFile('{}')).toEqual({ gate: null, queue: [], working: null, updatedAt: null });
+  });
+});
+
+describe('parseLimits and parseWatchdogTail', () => {
+  it('reads the working cap', () => {
+    expect(parseLimits('{"sessions_max": 7, "heavy_slots": 1}')).toEqual({ max: 7 });
+    expect(parseLimits('{"sessions_max": 0}')).toEqual({ max: 0 });
+    for (const bad of ['', '{', '{"sessions_max":"7"}']) expect(parseLimits(bad)).toEqual({ max: null });
+  });
+
+  it('reads the paused panes and the hold from the last WATCHDOG line', () => {
+    const log = [
+      '11:42 battito: mem full 0.00% · sessioni 58% del tetto',
+      "11:48 WATCHDOG: sessioni Claude all'87% del loro tetto di memoria → lanci fermati (sessions_max 0), pausa mandata a: wE:p1E wG:p8 ",
+      '12:06 battito: mem full 0.00%',
+    ].join('\n');
+    expect(parseWatchdogTail(log)).toEqual({ pausedPanes: ['wE:p1E', 'wG:p8'], held: true });
+    expect(parseWatchdogTail(log + '\n13:51 WATCHDOG: pressione passata (sessioni 34% del tetto) → tetto ripristinato a 7')).toEqual({ pausedPanes: [], held: false });
+    expect(parseWatchdogTail("13:36 WATCHDOG: sessioni Claude all'88% → lanci fermati (sessions_max 0), pausa mandata a: ")).toEqual({ pausedPanes: [], held: true });
+    expect(parseWatchdogTail('')).toEqual({ pausedPanes: [], held: false });
+    // A pane that is not herdr's is not a pane.
+    expect(parseWatchdogTail('WATCHDOG: x → lanci fermati, pausa mandata a: wE:p1E %7 rm;-rf')).toEqual({ pausedPanes: ['wE:p1E'], held: true });
+  });
+});
+
+describe('parseTaskPanes and parseSeatsLog', () => {
+  it('maps each pane to the last task that named it', () => {
+    const text = [
+      JSON.stringify({ ev: 'add', id: 'G-268', title: 'hopper' }),
+      JSON.stringify({ ev: 'update', id: 'G-268', sessions: [{ pane: 'wK:p2', profile: 'leonardo' }] }),
+      JSON.stringify({ ev: 'update', id: 'G-178', sessions: [{ pane: 'wE:p1M' }, { pane: 'wE:p1N' }] }),
+      'not json',
+      JSON.stringify({ ev: 'update', id: 'G-269', sessions: [{ pane: 'wE:p1N' }] }),
+    ].join('\n');
+    expect([...parseTaskPanes(text)]).toEqual([['wK:p2', 'G-268'], ['wE:p1M', 'G-178'], ['wE:p1N', 'G-269']]);
+  });
+
+  it('reads the current seat from the last set', () => {
+    expect(parseSeatsLog('{"ev":"set","seat":"Francesco Datini"}\nbad\n{"ev":"set","seat":"Jacopo Anselmi","ts":"x"}\n{"ev":"note","seat":"Luca"}')).toBe('Jacopo Anselmi');
+    expect(parseSeatsLog('')).toBeNull();
+  });
+});
+
+describe('buildSeats', () => {
+  const accounts = {
+    'Jacopo Anselmi': { email: 'jacopo@example.com' },
+    'Leonardo Davinci': { email: 'leonardo@example.com', profile: 'leonardo' },
+    'Luca Pacioli': { email: 'luca@example.com' },
+    'Pietro Fusar Poli': { email: 'pietro@example.com' },
+    'Personale (J)': { email: 'j@gmail.example', profile: 'personal' },
+  };
+  const order = ['Pietro Fusar Poli', 'Luca Pacioli', 'Leonardo Davinci'];
+  const doc = (email: string, session: number, week: number, writtenAt = NOW / 1000 - 60) =>
+    parseLimitDoc(JSON.stringify({ email, five_hour: { used_percentage: session, resets_at: 1792166400 }, seven_day: { used_percentage: week, resets_at: 1792242000 }, written_at: writtenAt }))!;
+
+  it('builds one seat per account in the accounts file, in seat order then the rest, with full, stale and turnable', () => {
+    const docs = [doc('jacopo@example.com', 6, 41), doc('leonardo@example.com', 9, 59), doc('luca@example.com', 2, 86), doc('j@gmail.example', 37, 16, NOW / 1000 - 7 * 3600)];
+    const seats = buildSeats(docs, accounts, order, 'Jacopo Anselmi', NOW);
+    expect(seats.map((s) => [s.name, s.current, s.full, s.stale, s.turnable, s.week?.usedPct ?? null])).toEqual([
+      ['Pietro', false, false, true, true, null],
+      ['Luca', false, true, false, true, 86],
+      ['Leonardo', false, false, false, true, 59],
+      ['Jacopo', true, false, false, true, 41],
+      ['Personale', false, false, true, false, 16],
+    ]);
+    expect(seats[3]!.session).toEqual({ usedPct: 6, resetsAt: 1792166400_000, readAt: (NOW / 1000 - 60) * 1000 });
+  });
+
+  it('is null for a reading that is not one', () => {
+    for (const bad of ['', '{', '{"five_hour":{}}', JSON.stringify({ email: 7 })]) expect(parseLimitDoc(bad)).toBeNull();
+  });
+});
+
+describe('readPower', () => {
+  it('reads anon + shmem against memory.max, and no cap as null', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shq-cg-'));
+    await writeFile(join(dir, 'memory.stat'), 'anon 17650155520\nfile 11080888320\nshmem 1024\n');
+    await writeFile(join(dir, 'memory.max'), '48001552384\n');
+    expect(await readPower(dir)).toEqual({ usedBytes: 17650156544, maxBytes: 48001552384, warnPct: 85 });
+    await writeFile(join(dir, 'memory.max'), 'max\n');
+    expect(await readPower(dir)).toEqual({ usedBytes: 17650156544, maxBytes: null, warnPct: 85 });
+    expect(await readPower(join(dir, 'missing'))).toBeNull();
+  });
+});
