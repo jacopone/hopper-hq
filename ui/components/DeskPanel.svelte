@@ -12,7 +12,7 @@
   interface Props {
     /** The session: at a desk on the floor, or waiting for one. */
     desk: Occupant;
-    floor: Pick<FloorDetail, 'number' | 'name' | 'rooms' | 'unseated'>;
+    floor: Pick<FloorDetail, 'number' | 'name' | 'rooms' | 'unseated' | 'terminal'>;
     now: number;
     onBack: () => void;
     onGo: (sessionId: string) => void;
@@ -22,13 +22,13 @@
   }
   let { desk, floor, now, onBack, onGo, onSeen, onRun }: Props = $props();
 
-  const where = $derived(desk.location === 'cloud' ? 'remote' : desk.pane ? `tmux pane ${desk.pane}` : 'not in tmux');
+  const where = $derived(desk.location === 'cloud' ? 'remote' : desk.pane ? `${floor.terminal} pane ${desk.pane}` : `not in ${floor.terminal}`);
   const by = $derived(raisedBy(desk.reason));
   /** Why Go is off, when it is. */
   const cannotGo = $derived.by(() => {
     if (desk.focusable) return null;
-    if (desk.location === 'cloud') return 'It runs in the cloud: there is no tmux pane to go to.';
-    return 'It does not run in a tmux pane, so there is nowhere to go.';
+    if (desk.location === 'cloud') return `It runs in the cloud: there is no ${floor.terminal} pane to go to.`;
+    return `It does not run in a ${floor.terminal} pane, so there is nowhere to go.`;
   });
   /** The runs with a room on the floor: their rows open them. */
   const roomed = $derived(new Set(floor.rooms.map((r) => r.runId)));

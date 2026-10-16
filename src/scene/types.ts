@@ -3,9 +3,9 @@
  * Every string is cleaned by the server (control and bidi characters removed, length capped).
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
-import type { RunStatus, SessionState, WaitKind } from '../core/types.js';
+import type { RunStatus, SessionState, TerminalKind, WaitKind } from '../core/types.js';
 
-export const SCENE_VERSION = 5;
+export const SCENE_VERSION = 6;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -62,8 +62,20 @@ export interface AttentionEntry {
   summary: DeskSummary | null;
 }
 
+/** The terminal Go switches, and how far it reaches: of the local sessions, how many have a pane of its kind. */
+export interface SceneTerminal {
+  kind: TerminalKind;
+  /** Whether the terminal answered the last time the daemon asked; null when the daemon does not ask (tmux). */
+  reachable: boolean | null;
+  /** Local sessions in the building with a pane Go can reach. */
+  mapped: number;
+  /** Local sessions in the building. */
+  local: number;
+}
+
 export interface BuildingScene {
   version: typeof SCENE_VERSION;
+  terminal: SceneTerminal;
   /** Top to bottom: newest first-seen first. */
   floors: FloorSummary[];
   /** needsYou: longest wait first. done: oldest first. */
@@ -193,7 +205,7 @@ export interface Occupant {
   location: 'local' | 'cloud';
   /** The account the session runs under (an email, or the label of its config directory); null when the sessions carry none. */
   account: string | null;
-  /** tmux pane id (%N) for display; focus goes through POST /api/focus by sessionId. */
+  /** The pane id for display, as the terminal writes it ('%N' in tmux, 'wK:p2' in herdr); focus goes through POST /api/focus by sessionId. */
   pane: string | null;
   focusable: boolean;
   /** Null when dormant: gone home. */
@@ -246,6 +258,8 @@ export interface Lounge {
 
 export interface FloorDetail extends Omit<FloorSummary, 'windows'> {
   version: typeof SCENE_VERSION;
+  /** The terminal Go switches: it names the panes. */
+  terminal: TerminalKind;
   /** Floor footprint in cells (walls run along its edges). */
   size: { w: number; h: number };
   /** Elevator and plants corner (decor; never overlaps pods). */

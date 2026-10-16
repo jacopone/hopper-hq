@@ -4,7 +4,8 @@ import { DEFAULT_FEATURE_RULES, deriveFeature, type FeatureRules } from './core/
 import { applyEvent, markSeen, normalizeSession, settleRestored } from './core/reducer.js';
 import type { CollectorEvent, EventSourceKind, RawEvent, Session, SessionSummary, WaitReason } from './core/types.js';
 import { buildAttention, buildFloors, floorKeyOf, toView, type Attention, type Floor, type SessionView } from './core/view.js';
-import { buildFloorDetail, buildScene } from './scene/build.js';
+import type { TerminalKind } from './core/terminal.js';
+import { buildFloorDetail, buildScene, DEFAULT_TERMINAL } from './scene/build.js';
 import { parseSeating, seatFloor, type Seating } from './scene/seating.js';
 import { cleanOrNull, cleanText, isSessionId, taskTitle } from './scene/text.js';
 import type { BuildingScene, FloorDetail } from './scene/types.js';
@@ -50,6 +51,8 @@ export interface CollectorOptions {
   featureRules?: FeatureRules;
   /** When set, events from other sources are ignored. */
   acceptSources?: EventSourceKind[];
+  /** The terminal Go switches, which names the panes (default tmux). */
+  terminal?: TerminalKind;
   saveDelayMs?: number;
   log?: (line: string) => void;
   /** Events from a working directory this matches are dropped as they arrive: the summarizer's own sessions. */
@@ -91,6 +94,8 @@ export class Collector {
   dropped = 0;
   /** Events dropped because their working directory is ignored. */
   ignored = 0;
+  /** Whether the terminal answered the last time an adapter asked; null until one says, and always for tmux. */
+  private terminalReachable: boolean | null = null;
 
   constructor(private readonly o: CollectorOptions) {
     this.now = o.now ?? Date.now;
@@ -361,25 +366,38 @@ export class Collector {
     return this.seating.get(key) ?? null;
   }
 
+  /** The terminal the scene names, and what is known of its reach. */
+  private terminal(): { kind: TerminalKind; reachable: boolean | null } {
+    return { kind: this.o.terminal ?? DEFAULT_TERMINAL.kind, reachable: this.terminalReachable };
+  }
+
+  /** The terminal's adapter says whether the terminal answers. A change is news to every browser. */
+  setTerminalReachable(reachable: boolean | null): void {
+    if (this.terminalReachable === reachable) return;
+    this.terminalReachable = reachable;
+    for (const fn of this.listeners) fn();
+  }
+
   /** The building every browser sees: façade, floor directory and attention. */
   scene(): BuildingScene {
     const views = this.liveViews();
-    return buildScene(views, this.firstSeen, this.seat(views));
+    return buildScene(views, this.firstSeen, this.seat(views), this.terminal());
   }
 
   /** One floor in detail, or null when no live session is on it. */
   floor(key: string): FloorDetail | null {
     const views = this.liveViews();
-    return buildFloorDetail(views, key, this.firstSeen, this.seat(views));
+    return buildFloorDetail(views, key, this.firstSeen, this.seat(views), this.terminal().kind);
   }
 
   /** The building and the given floors (null for one nobody is on) from one reading of the clock: a session shows one state in all of them. */
   render(floorKeys: readonly string[]): { scene: BuildingScene; floors: Map<string, FloorDetail | null> } {
     const views = this.liveViews();
     const seating = this.seat(views);
+    const terminal = this.terminal();
     return {
-      scene: buildScene(views, this.firstSeen, seating),
-      floors: new Map(floorKeys.map((key) => [key, buildFloorDetail(views, key, this.firstSeen, seating)])),
+      scene: buildScene(views, this.firstSeen, seating, terminal),
+      floors: new Map(floorKeys.map((key) => [key, buildFloorDetail(views, key, this.firstSeen, seating, terminal.kind)])),
     };
   }
 

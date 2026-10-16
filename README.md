@@ -215,6 +215,12 @@ set -g status-interval 5
 
 `◉` is the number of sessions waiting for you. `✓` is the number of finished sessions you have not looked at. `hopper-hq ack` clears the `✓`.
 
+## herdr
+
+[herdr](https://herdr.dev) is a terminal workspace manager for coding agents. Under herdr, `Go` focuses the session's tab (`herdr tab focus`), and the badge at the top right says how many of the local sessions have a pane to go to, since herdr has no status line of its own. Claude Code's session files name no pane there: the daemon asks `herdr pane list` every few seconds, and the listing says which pane shows which session.
+
+`--terminal auto`, the default, takes herdr when `herdr pane list` answers as the daemon starts, and tmux otherwise. `--terminal tmux` or `--terminal herdr` decides; `HOPPER_HQ_TERMINAL` says the same for a daemon started by a service.
+
 ## The Claude Code mod (recommended)
 
 The mod reports each session as things happen, with the exact reason a session waits. It also shows, above the prompt of every session, who else is waiting for you. A `Go` button jumps to that tmux pane.
@@ -302,7 +308,7 @@ Each summary is one call to the model, a small one by default. A session gets at
 | --- | --- |
 | `hopper-hq up` | Starts the daemon in the background unless it is running, then opens the building like `ui`. Use `--no-open` to print the link only. |
 | `hopper-hq down` | Stops the daemon. |
-| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository). |
+| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository); `--terminal auto|tmux|herdr` picks the [terminal](#herdr) Go switches. |
 | `hopper-hq status` | Prints a summary. Use `--format text`, `tmux` or `json`. |
 | `hopper-hq ls` | Lists floors and their sessions. |
 | `hopper-hq ack` | Marks finished sessions as seen. |

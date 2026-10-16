@@ -28,6 +28,26 @@ describe('TopBar', () => {
   });
 });
 
+describe('TopBar terminal badge', () => {
+  const base = () => ({ crumbs: [{ label: 'Building', route: { floor: null, desk: null, run: null } }], needsYou: 1, done: 2, theme: 'system' as const, resolved: 'day' as const, onNavigate: () => {}, onTheme: () => {} });
+
+  it('names tmux and its status line counts by default', () => {
+    const target = render(TopBar, { ...base() });
+    expect(text(target.querySelector('.tmux .k'))).toBe('tmux');
+    expect(target.querySelector('.tmux .r')).toBeNull();
+    expect(target.querySelector('.tmux')!.getAttribute('title')).toBe('What the tmux status line shows');
+  });
+
+  it('names herdr with how many local sessions Go reaches, or that it does not answer', () => {
+    const target = render(TopBar, { ...base(), terminal: { kind: 'herdr', reachable: true, mapped: 21, local: 24 } });
+    expect([text(target.querySelector('.tmux .k')), text(target.querySelector('.tmux .r'))]).toEqual(['herdr', '21/24 panes']);
+    expect(text(target.querySelector('.tmux .visually-hidden'))).toBe('1 needs you, 2 done, herdr 21/24 panes');
+    cleanup();
+    const down = render(TopBar, { ...base(), terminal: { kind: 'herdr', reachable: false, mapped: 0, local: 24 } });
+    expect(text(down.querySelector('.tmux .r'))).toBe('not answering');
+  });
+});
+
 describe('Toast', () => {
   it('shows each toast as text, marks errors, and dismisses on click', () => {
     vi.useFakeTimers();

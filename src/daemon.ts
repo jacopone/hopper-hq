@@ -6,17 +6,19 @@ import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { accountLabels } from './adapters/claude-code/account.js';
 import { FsAdapter } from './adapters/claude-code/fs-adapter.js';
+import { HerdrAdapter, probeHerdr } from './adapters/herdr.js';
 import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
 import { callDaemon } from './client.js';
 import { Collector } from './collector.js';
-import { DEFAULT_PORT, resolveFloorMode, resolvePaths, type Paths } from './config.js';
+import { DEFAULT_PORT, resolveFloorMode, resolvePaths, resolveTerminal, type Paths } from './config.js';
 import { rulesFor, type FloorMode } from './core/feature.js';
+import type { TerminalChoice, TerminalKind } from './core/terminal.js';
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from './daemon-file.js';
 import { DataDirInUseError, lockDataDir, type DataDirLock } from './daemon-lock.js';
 import { loginUrl, UiAuth } from './server/auth.js';
 import { SceneHub } from './server/events.js';
-import { simulatedFocusDriver, tmuxFocusDriver } from './server/focus.js';
+import { herdrFocusDriver, simulatedFocusDriver, tmuxFocusDriver } from './server/focus.js';
 import { createApiServer } from './server/http.js';
 import { loadUiBundle, UI_LIMITS } from './server/static.js';
 import { Store } from './store/store.js';
@@ -33,6 +35,8 @@ export interface DaemonOptions {
   dataDir?: string;
   /** One floor per feature (default) or per repository. */
   floors?: FloorMode;
+  /** The terminal Go switches: tmux, herdr, or auto (default), which takes herdr when it answers. */
+  terminal?: TerminalChoice;
   /** Watch the config directories on disk (default true). The mod works either way. */
   watchFiles?: boolean;
   log?: (line: string) => void;
@@ -149,7 +153,19 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   const watchFiles = !opts.demo && opts.watchFiles !== false;
   // Restored subagents run on until the first scan has reported on them; with no scan to come, they stop at once.
   const floors = opts.floors ?? resolveFloorMode(undefined);
-  const collector = new Collector({ resolveWorkspace, store, acceptSources: opts.demo ? ['demo'] : ['hook', 'fs'], log, ignoreCwd, holdRestored: watchFiles, featureRules: rulesFor(floors) });
+  // The demo's panes are tmux's. Otherwise, herdr when asked for, or when nobody asked and it answers.
+  const choice = opts.terminal ?? resolveTerminal(undefined);
+  const terminal: TerminalKind = opts.demo ? 'tmux' : choice === 'auto' ? ((await probeHerdr()) ? 'herdr' : 'tmux') : choice;
+  const collector = new Collector({
+    resolveWorkspace,
+    store,
+    acceptSources: opts.demo ? ['demo'] : ['hook', 'fs', 'terminal'],
+    log,
+    ignoreCwd,
+    holdRestored: watchFiles,
+    featureRules: rulesFor(floors),
+    terminal,
+  });
   const summarizer = new Summarizer({
     source: collector,
     config: opts.demo ? async () => DEMO_SUMMARY_CONFIG : cachedSummaryConfig(paths.dataDir),
@@ -167,7 +183,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   const auth = new UiAuth({ token, codeTtlMs: opts.demo ? DEMO_CODE_TTL_MS : undefined });
   const hub = new SceneHub({ source: collector, log });
   // Demo panes (%4…%11) must never reach the user's real tmux.
-  const focus = opts.demo ? simulatedFocusDriver : tmuxFocusDriver();
+  const focus = opts.demo ? simulatedFocusDriver : terminal === 'herdr' ? herdrFocusDriver() : tmuxFocusDriver();
   let requestStop!: () => void;
   const stopRequested = new Promise<void>((resolve) => (requestStop = resolve));
   const server = createApiServer({ collector, token, auth, ui, hub, focus, summarizer, onShutdown: () => requestStop() });
@@ -208,9 +224,13 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
         openRuns: (id) => collector.session(id)?.runs.filter((r) => r.status === 'running' && r.onDisk).map((r) => r.id) ?? [],
       });
   fsAdapter?.start();
+  // Under herdr the session files name no pane: the terminal's own listing does.
+  const herdr = watchFiles && terminal === 'herdr' ? new HerdrAdapter({ emit: (e) => void collector.ingest(e), onReachable: (v) => collector.setTerminalReachable(v) }) : null;
+  herdr?.start();
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
   if (floors !== 'feature') log(`hopper-hq gives each repository a floor (--floors ${floors})`);
+  if (!opts.demo) log(`hopper-hq switches panes with ${terminal}${choice === 'auto' ? ' (--terminal auto)' : ''}`);
   if (labels && paths.claudeDirs.length > 1) log(`hopper-hq watches ${paths.claudeDirs.length} config directories: ${paths.claudeDirs.map((d) => `${d.dir} (${labels.get(d.dir)})`).join(', ')}`);
 
   return {
@@ -222,6 +242,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
     stop: async () => {
       summarizer.stop();
       fsAdapter?.stop();
+      herdr?.stop();
       demo?.stop();
       hub.close();
       server.closeAllConnections();

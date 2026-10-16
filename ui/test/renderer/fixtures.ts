@@ -156,6 +156,7 @@ export function makeFloor(checkouts: CheckoutSpec[], key = 'feature:checkout-v2'
   for (const o of [...pods.flatMap((p) => p.desks.flatMap((d) => (d.occupant ? [d.occupant] : []))), ...waiting]) counts[o.state] = (counts[o.state] ?? 0) + 1;
   return {
     version: SCENE_VERSION,
+    terminal: 'tmux',
     key,
     number: 1,
     kind: key.startsWith('feature:') ? 'feature' : 'department',

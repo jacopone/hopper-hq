@@ -9,22 +9,33 @@
 </script>
 
 <script lang="ts">
+  import type { SceneTerminal } from '../../src/scene/types';
   import { THEME_LABEL, nextTheme, type ThemePreference } from '../lib/theme';
   import { needYou } from '../lib/words';
 
   interface Props {
     crumbs: Crumb[];
-    /** The tmux counter: how many sessions need you, and how many are done. */
+    /** The terminal counter: how many sessions need you, and how many are done. */
     needsYou: number;
     done: number;
+    /** The terminal Go switches, and its reach; null before the scene arrives (tmux is assumed). */
+    terminal?: SceneTerminal | null;
     theme: ThemePreference;
     /** What system means right now. */
     resolved: 'day' | 'night';
     onNavigate: (route: Route) => void;
     onTheme: () => void;
   }
-  let { crumbs, needsYou, done, theme, resolved, onNavigate, onTheme }: Props = $props();
+  let { crumbs, needsYou, done, terminal = null, theme, resolved, onNavigate, onTheme }: Props = $props();
   const label = $derived(theme === 'system' ? `System (${resolved})` : THEME_LABEL[theme]);
+  const kind = $derived(terminal?.kind ?? 'tmux');
+  /** herdr has no status line: the badge says instead how many local sessions Go can reach, or that herdr does not answer. */
+  const reach = $derived.by(() => {
+    if (!terminal || terminal.kind === 'tmux') return null;
+    if (terminal.reachable === false) return 'not answering';
+    return `${terminal.mapped}/${terminal.local} panes`;
+  });
+  const title = $derived(kind === 'tmux' ? 'What the tmux status line shows' : `herdr: ${reach ?? 'the terminal Go switches'}`);
 </script>
 
 <header class="topbar">
@@ -44,11 +55,12 @@
     <button type="button" class="btn theme" aria-label="Theme: {label}. Switch to {THEME_LABEL[nextTheme(theme)]}." onclick={onTheme}>
       Theme: {label}
     </button>
-    <span class="tmux" title="What the tmux status line shows">
-      <span class="k" aria-hidden="true">tmux</span>
+    <span class="tmux" {title}>
+      <span class="k" aria-hidden="true">{kind}</span>
       <span class="n" aria-hidden="true">◉{needsYou}</span>
       <span class="d" aria-hidden="true">✓{done}</span>
-      <span class="visually-hidden">{needsYou} {needYou(needsYou)}, {done} done</span>
+      {#if reach}<span class="r" aria-hidden="true">{reach}</span>{/if}
+      <span class="visually-hidden">{needsYou} {needYou(needsYou)}, {done} done{reach ? `, ${kind} ${reach}` : ''}</span>
     </span>
   </div>
 </header>
@@ -87,4 +99,5 @@
   .k { opacity: .55; }
   .n { color: var(--tmux-needs); }
   .d { color: var(--tmux-done); }
+  .r { opacity: .7; }
 </style>

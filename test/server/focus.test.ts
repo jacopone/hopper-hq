@@ -13,7 +13,7 @@ import type { RawEvent, Workspace } from '../../src/core/types.js';
 import { readDaemonFile } from '../../src/daemon-file.js';
 import { startDaemon } from '../../src/daemon.js';
 import { UiAuth } from '../../src/server/auth.js';
-import { simulatedFocusDriver, tmuxFocusDriver, type FocusDriver, type FocusOutcome, type TmuxRunner } from '../../src/server/focus.js';
+import { herdrFocusDriver, simulatedFocusDriver, tmuxFocusDriver, type FocusDriver, type FocusOutcome, type TmuxRunner } from '../../src/server/focus.js';
 import { createApiServer } from '../../src/server/http.js';
 import { bearer, call, close, listen } from '../helpers/http.js';
 
@@ -104,15 +104,15 @@ describe('tmuxFocusDriver', () => {
     }
   });
 
-  it('reports tmux_failed when switch-client fails, and stops there', async () => {
+  it('reports failed when switch-client fails, and stops there', async () => {
     const t = fakeTmux({ 'list-clients': { code: 0, stdout: CLIENTS }, 'switch-client': { code: 1, stderr: "can't find pane: %7" } });
-    expect(await tmuxFocusDriver(t.run).focus('%7')).toEqual({ ok: false, reason: 'tmux_failed' });
+    expect(await tmuxFocusDriver(t.run).focus('%7')).toEqual({ ok: false, reason: 'failed' });
     expect(t.calls).toHaveLength(2);
   });
 
-  it('reports tmux_failed when select-pane fails, and ignores select-window', async () => {
+  it('reports failed when select-pane fails, and ignores select-window', async () => {
     const paneFails = fakeTmux({ 'list-clients': { code: 0, stdout: CLIENTS }, 'select-pane': { code: 1 } });
-    expect(await tmuxFocusDriver(paneFails.run).focus('%7')).toEqual({ ok: false, reason: 'tmux_failed' });
+    expect(await tmuxFocusDriver(paneFails.run).focus('%7')).toEqual({ ok: false, reason: 'failed' });
     const windowFails = fakeTmux({ 'list-clients': { code: 0, stdout: CLIENTS }, 'select-window': { code: 1 } });
     expect(await tmuxFocusDriver(windowFails.run).focus('%7')).toEqual({ ok: true });
   });
@@ -143,6 +143,24 @@ describe('tmuxFocusDriver', () => {
   });
 });
 
+describe('herdrFocusDriver', () => {
+  it('focuses the tab the pane is in, and nothing else', async () => {
+    const t = fakeTmux({});
+    const driver = herdrFocusDriver(t.run);
+    expect([driver.kind, driver.simulated]).toEqual(['herdr', false]);
+    expect(await driver.focus('wK:p2', 'ignored')).toEqual({ ok: true });
+    expect(t.calls).toEqual([['tab', 'focus', 'wK:t2']]);
+  });
+
+  it('rejects a pane that is not herdr\'s before running anything, and reports a focus that failed', async () => {
+    const t = fakeTmux({ tab: { code: 1, stderr: 'no such tab' } });
+    const driver = herdrFocusDriver(t.run);
+    for (const bad of ['%7', 'wK:t2', 'wK:p2 x']) expect(await driver.focus(bad)).toEqual({ ok: false, reason: 'invalid_pane' });
+    expect(t.calls).toEqual([]);
+    expect(await driver.focus('wK:p2')).toEqual({ ok: false, reason: 'failed' });
+  });
+});
+
 describe('simulatedFocusDriver', () => {
   it('says it is simulated, checks the pane, and runs nothing', async () => {
     expect(simulatedFocusDriver.simulated).toBe(true);
@@ -167,6 +185,7 @@ describe('POST /api/focus', () => {
   const sessions: Array<string | null | undefined> = [];
   let outcome: FocusOutcome = { ok: true };
   const driver: FocusDriver = {
+    kind: 'tmux',
     simulated: false,
     focus: async (pane, session) => {
       panes.push(pane);
@@ -230,7 +249,7 @@ describe('POST /api/focus', () => {
     expect(await focus('{"sessionId":"LOCAL"}')).toMatchObject({ status: 409, json: { error: 'No tmux client is attached' } });
     outcome = { ok: false, reason: 'invalid_pane' };
     expect((await focus('{"sessionId":"LOCAL"}')).status).toBe(409);
-    outcome = { ok: false, reason: 'tmux_failed' };
+    outcome = { ok: false, reason: 'failed' };
     expect(await focus('{"sessionId":"LOCAL"}')).toMatchObject({ status: 502, json: { error: 'tmux could not switch to the pane' } });
   });
 

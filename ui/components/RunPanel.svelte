@@ -30,8 +30,8 @@
   /** Why Go is off, when it is. */
   const cannotGo = $derived.by(() => {
     if (!found || found.host.focusable) return null;
-    if (found.host.location === 'cloud') return 'Its host runs in the cloud: there is no tmux pane to go to.';
-    return 'Its host does not run in a tmux pane, so there is nowhere to go.';
+    if (found.host.location === 'cloud') return `Its host runs in the cloud: there is no ${floor.terminal} pane to go to.`;
+    return `Its host does not run in a ${floor.terminal} pane, so there is nowhere to go.`;
   });
 </script>
 

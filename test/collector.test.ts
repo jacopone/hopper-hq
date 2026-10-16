@@ -21,6 +21,24 @@ function collector(extra: Partial<ConstructorParameters<typeof Collector>[0]> = 
   return new Collector({ resolveWorkspace: resolver, now: () => NOW + 1000, saveDelayMs: 0, ...extra });
 }
 
+describe('the terminal\'s pane events', () => {
+  it('moves a known session to the pane the terminal lists, and drops a pane for a session it does not know', async () => {
+    const c = collector({ terminal: 'herdr' });
+    await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    await c.ingest({ type: 'pane', sessionId: 'S1', ts: NOW, source: 'terminal', pane: 'wK:p2' });
+    await c.ingest({ type: 'pane', sessionId: 'S9', ts: NOW, source: 'terminal', pane: 'wK:p3' });
+    expect(c.session('S1')).toMatchObject({ tmuxPane: 'wK:p2', tmuxSession: null });
+    expect(c.session('S9')).toBeNull();
+    expect(c.dropped).toBe(1);
+    const scene = c.scene();
+    expect(scene.terminal).toEqual({ kind: 'herdr', reachable: null, mapped: 1, local: 1 });
+    c.setTerminalReachable(true);
+    expect(c.scene().terminal.reachable).toBe(true);
+    await c.ingest({ type: 'pane', sessionId: 'S1', ts: NOW, source: 'terminal', pane: null });
+    expect(c.scene().terminal.mapped).toBe(0);
+  });
+});
+
 describe('Collector', () => {
   it('creates an unknown session from an event that carries a cwd', async () => {
     const c = collector();

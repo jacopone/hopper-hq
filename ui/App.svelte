@@ -199,11 +199,12 @@
     }
   }
 
-  /** Switches tmux to the session's pane. The demo only says what it would do. */
+  /** Switches the terminal to the session's pane. The demo only says what it would do. */
   function focus(sessionId: string): Promise<void> {
     return once(`focus ${sessionId}`, async () => {
       const result = await api.focusSession(sessionId);
-      if (result.ok) toasts.show(result.simulated ? `Demo: would switch tmux to ${result.pane}` : `Switched tmux to ${result.pane}`);
+      const kind = scene?.terminal.kind ?? 'tmux';
+      if (result.ok) toasts.show(result.simulated ? `Demo: would switch ${kind} to ${result.pane}` : `Switched ${kind} to ${result.pane}`);
       else toasts.show(result.error, 'error');
     });
   }
@@ -230,6 +231,7 @@
       {crumbs}
       needsYou={scene?.attention.needsYou.length ?? 0}
       done={scene?.attention.done.length ?? 0}
+      terminal={scene?.terminal ?? null}
       {theme}
       resolved={resolvedTheme(theme, systemDark)}
       onNavigate={navigate}
@@ -237,7 +239,7 @@
     />
     <Notice connection={$store.connection} hasScene={scene !== null} />
     {#if scene}
-      <AttentionBar attention={scene.attention} now={clock} onOpen={openEntry} onGo={(entry) => focus(entry.sessionId)} />
+      <AttentionBar attention={scene.attention} terminal={scene.terminal.kind} now={clock} onOpen={openEntry} onGo={(entry) => focus(entry.sessionId)} />
     {/if}
     <main class="main">
       <section class="stage" aria-label={route.floor === null ? 'Building' : 'Floor'} bind:this={stage}>

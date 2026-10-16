@@ -23,7 +23,7 @@ export interface ApiOptions {
   ui?: UiBundle | null;
   /** Live views; the daemon passes its own so that it can close them on stop. */
   hub?: SceneHub;
-  /** Switches tmux to a session's pane. Defaults to the simulated driver: nothing reaches tmux unless the daemon wires the real one. */
+  /** Switches the terminal to a session's pane. Defaults to the simulated driver: nothing reaches tmux or herdr unless the daemon wires the real one. */
   focus?: FocusDriver;
   /** Called when the CLI asks the daemon to stop (`hopper-hq down`), once the answer is sent. Default: nothing stops. */
   onShutdown?: () => void;
@@ -250,12 +250,13 @@ async function postFocus(d: Deps, { req, res }: Ctx): Promise<void> {
   if (!v) return send(res, 404, { error: 'No such session' });
   if (v.effectiveState === 'ended') return send(res, 409, { error: 'The session has ended' });
   if (v.location !== 'local') return send(res, 409, { error: 'The session does not run on this machine' });
-  if (!v.tmuxPane) return send(res, 409, { error: 'The session is not in a tmux pane' });
+  const kind = d.focus.kind;
+  if (!v.tmuxPane) return send(res, 409, { error: `The session is not in a ${kind} pane` });
   const outcome = await d.focus.focus(v.tmuxPane, v.tmuxSession);
-  if (outcome.ok) return send(res, 200, { pane: v.tmuxPane, simulated: d.focus.simulated });
-  if (outcome.reason === 'tmux_failed') return send(res, 502, { error: 'tmux could not switch to the pane' });
+  if (outcome.ok) return send(res, 200, { pane: v.tmuxPane, terminal: kind, simulated: d.focus.simulated });
+  if (outcome.reason === 'failed') return send(res, 502, { error: `${kind} could not switch to the pane` });
   if (outcome.reason === 'other_session') return send(res, 409, { error: 'The pane is on another tmux server or session' });
-  send(res, 409, { error: outcome.reason === 'no_client' ? 'No tmux client is attached' : 'The session is not in a tmux pane' });
+  send(res, 409, { error: outcome.reason === 'no_client' ? 'No tmux client is attached' : `The session is not in a ${kind} pane` });
 }
 
 /** Answers first: stopping closes every connection, this one included. */

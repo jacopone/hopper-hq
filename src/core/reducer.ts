@@ -244,6 +244,9 @@ export function applyEvent(prev: Session | undefined, e: CollectorEvent): Sessio
         transcriptPath: e.transcriptPath ?? s.transcriptPath,
         startedAt: Math.min(s.startedAt, e.startedAt ?? s.startedAt),
       };
+    case 'pane':
+      // The terminal's word on where the session is: a pane from a session file, written at start, may be stale by now.
+      return s.tmuxPane === e.pane ? s : { ...s, tmuxPane: e.pane, tmuxSession: null };
     case 'title':
       return { ...s, title: e.title };
     case 'branch':

@@ -13,11 +13,13 @@
    */
   interface Props {
     attention: BuildingScene['attention'];
+    /** The terminal Go switches, for the button's label. */
+    terminal?: BuildingScene['terminal']['kind'];
     now: number;
     onOpen: (entry: AttentionEntry) => void;
     onGo: (entry: AttentionEntry) => void;
   }
-  let { attention, now, onOpen, onGo }: Props = $props();
+  let { attention, terminal = 'tmux', now, onOpen, onGo }: Props = $props();
 
   function what(entry: AttentionEntry): string {
     if (entry.state === 'done') return entry.title ?? 'Finished its turn';
@@ -50,7 +52,7 @@
                 {/if}
               </button>
               {#if entry.focusable}
-                <button type="button" class="go" aria-label="Go to the tmux pane of {entry.name}" onclick={singleClick(() => onGo(entry))}>Go</button>
+                <button type="button" class="go" aria-label="Go to the {terminal} pane of {entry.name}" onclick={singleClick(() => onGo(entry))}>Go</button>
               {/if}
             </li>
           {/each}

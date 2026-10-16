@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { FLOOR_MODES, type FloorMode } from './core/feature.js';
+import { TERMINAL_KINDS, type TerminalChoice } from './core/terminal.js';
 
 /** One of Claude Code's config directories (sessions/, projects/, settings.json), and what to call its sessions. */
 export interface ClaudeDir {
@@ -21,6 +22,13 @@ export function resolveFloorMode(value: string | undefined, env: NodeJS.ProcessE
   const word = value ?? env.HOPPER_HQ_FLOORS ?? 'feature';
   if (!(FLOOR_MODES as readonly string[]).includes(word)) throw new Error(`Unknown floor mode: ${word} (one of ${FLOOR_MODES.join(', ')})`);
   return word as FloorMode;
+}
+
+/** The terminal choice named by an option or HOPPER_HQ_TERMINAL; 'auto' when neither says; an error for a word that is no choice. */
+export function resolveTerminal(value: string | undefined, env: NodeJS.ProcessEnv = process.env): TerminalChoice {
+  const word = value ?? env.HOPPER_HQ_TERMINAL ?? 'auto';
+  if (word !== 'auto' && !(TERMINAL_KINDS as readonly string[]).includes(word)) throw new Error(`Unknown terminal: ${word} (one of auto, ${TERMINAL_KINDS.join(', ')})`);
+  return word as TerminalChoice;
 }
 
 export interface PathOptions {

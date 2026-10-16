@@ -1,3 +1,6 @@
+/** The terminal multiplexer the sessions run in: it names the panes, and Go reaches a session through it. */
+export type TerminalKind = 'tmux' | 'herdr';
+
 /** Lifecycle states of a session. Time-based ones (idle, dormant, no_signal) are also derived at read time, see core/view.ts. */
 export type SessionState =
   | 'working'
@@ -155,7 +158,8 @@ export interface Session {
   seenAt: number | null;
 }
 
-export type EventSourceKind = 'hook' | 'fs' | 'demo';
+/** 'terminal': the multiplexer's own listing (herdr), which says which pane a session is in. */
+export type EventSourceKind = 'hook' | 'fs' | 'demo' | 'terminal';
 
 interface EventBase {
   sessionId: string;
@@ -182,6 +186,8 @@ export type CollectorEvent = EventBase &
         startedAt?: number;
       }
     | { type: 'session.started' }
+    /** The pane the terminal shows the session in; null when it shows it in none any more. Only a known session takes it. */
+    | { type: 'pane'; pane: string | null }
     | { type: 'session.status'; status: 'busy' | 'idle' | 'waiting'; waitingFor: string | null }
     | { type: 'branch'; branch: string | null }
     | { type: 'title'; title: string }

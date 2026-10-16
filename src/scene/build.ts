@@ -2,6 +2,7 @@
  * Session views -> the scene model the browser draws (types.ts). Server-only: it builds on core/view.ts.
  * Pure and deterministic: the same views in any order give the same scene, down to its JSON text. Every string is cleaned.
  */
+import { isPaneOf, type TerminalKind } from '../core/terminal.js';
 import type { WorkflowRun } from '../core/types.js';
 import { liveRun } from '../core/reducer.js';
 import { buildFloors, byCodeUnit, floorKeyOf, islandKeyOf, repoLabels, repoRootOf, type Floor, type SessionView } from '../core/view.js';
@@ -31,6 +32,7 @@ import {
   type PodDesk,
   type Pose,
   type Robot,
+  type SceneTerminal,
   type RunSummary,
   type SceneReason,
   type ShownState,
@@ -51,7 +53,6 @@ const ROBOT: Record<ShownState, { pose: Pose; badge: Badge | null } | null> = {
 const SHOWN_STATES = Object.keys(ROBOT) as ShownState[];
 
 /** A tmux pane id, the only focus target tmux is given. */
-const PANE = /^%\d+$/;
 
 /** The reducer's name for a subagent it has seen act but not start: its type is unknown. */
 const UNNAMED_AGENT = 'agent';
@@ -87,9 +88,15 @@ function nameOf(v: SessionView): string {
   return cleanOrNull(v.name) ?? cleanText(`${v.workspace.repoName}-${Array.from(cleanText(v.id)).slice(0, 4).join('')}`);
 }
 
-/** Focus reaches a local session through its tmux pane. */
-function focusableOf(v: SessionView): boolean {
-  return v.effectiveState !== 'ended' && v.location === 'local' && v.tmuxPane !== null && PANE.test(v.tmuxPane);
+/** Focus reaches a local session through a pane of the terminal. */
+function focusableOf(v: SessionView, terminal: TerminalKind): boolean {
+  return v.effectiveState !== 'ended' && v.location === 'local' && isPaneOf(terminal, v.tmuxPane);
+}
+
+/** The terminal and its reach over the local sessions in the building. */
+function terminalOf(views: readonly SessionView[], kind: TerminalKind, reachable: boolean | null): SceneTerminal {
+  const local = views.filter((v) => v.effectiveState !== 'ended' && v.location === 'local');
+  return { kind, reachable, mapped: local.filter((v) => focusableOf(v, kind)).length, local: local.length };
 }
 
 /**
@@ -245,7 +252,7 @@ function checkoutOf(v: SessionView, label: (v: SessionView) => string): Checkout
 }
 
 /** A session on the floor, its robot at `at`, in its own repository's and feature's colours. */
-function occupantOf(v: SessionView, label: (v: SessionView) => string, at: Place, crewSeated = false): Occupant {
+function occupantOf(v: SessionView, label: (v: SessionView) => string, terminal: TerminalKind, at: Place, crewSeated = false): Occupant {
   const state = v.effectiveState as ShownState;
   return {
     sessionId: idOf(v),
@@ -262,7 +269,7 @@ function occupantOf(v: SessionView, label: (v: SessionView) => string, at: Place
     location: v.location,
     account: cleanOrNull(v.account),
     pane: cleanOrNull(v.tmuxPane),
-    focusable: focusableOf(v),
+    focusable: focusableOf(v, terminal),
     robot: robotOf(state, repoRootOf(v), v.feature),
     at,
     checkout: checkoutOf(v, label),
@@ -309,7 +316,7 @@ function roomOf({ run, host, crew }: RoomRun, slot: number, rect: GridRect): Mee
  * seat; its desk. The crew's subagents show as interns over the desk only while the crew has no room. The floor counts
  * the live runs and crews without a room, every host's: a run two hosts name counts twice.
  */
-function detailOf(floor: Floor, number: number, label: (v: SessionView) => string, seating: Seating): FloorDetail {
+function detailOf(floor: Floor, number: number, label: (v: SessionView) => string, seating: Seating, terminal: TerminalKind): FloorDetail {
   const plan = layoutPlan(seating);
   const on = new Map(floor.sessions.map((v) => [v.id, v]));
   const runs = roomRunsOf(floor);
@@ -332,7 +339,7 @@ function detailOf(floor: Floor, number: number, label: (v: SessionView) => strin
     p.desks.map((_, n) => {
       const v = on.get(seating.desks[i * POD_DESKS + n] ?? '');
       if (!v || seated.has(v.id)) return null;
-      seated.set(v.id, occupantOf(v, label, placeOf(v), slotOfKey(capKey(CREW_PREFIX + v.id)) !== -1));
+      seated.set(v.id, occupantOf(v, label, terminal, placeOf(v), slotOfKey(capKey(CREW_PREFIX + v.id)) !== -1));
       return v;
     }),
   );
@@ -349,7 +356,7 @@ function detailOf(floor: Floor, number: number, label: (v: SessionView) => strin
     };
   });
   const waiting = floor.sessions.filter((v) => !seated.has(v.id)).sort(bySessionStart);
-  const unseated = waiting.slice(0, UNSEATED_MAX).map((v) => occupantOf(v, label, { kind: 'gone' }));
+  const unseated = waiting.slice(0, UNSEATED_MAX).map((v) => occupantOf(v, label, terminal, { kind: 'gone' }));
   const rooms = runs
     .map((r) => ({ r, slot: slotOfKey(r.key) }))
     .filter(({ slot }) => slot !== -1)
@@ -360,6 +367,7 @@ function detailOf(floor: Floor, number: number, label: (v: SessionView) => strin
   const { windows: _windows, ...summary } = summaryOf(floor, number, seating);
   return {
     version: SCENE_VERSION,
+    terminal,
     ...summary,
     size: plan.size,
     core: plan.core,
@@ -373,7 +381,7 @@ function detailOf(floor: Floor, number: number, label: (v: SessionView) => strin
   };
 }
 
-function entryOf(v: SessionView, state: AttentionEntry['state']): AttentionEntry {
+function entryOf(v: SessionView, state: AttentionEntry['state'], terminal: TerminalKind): AttentionEntry {
   return {
     sessionId: idOf(v),
     floorKey: floorKeyOf(v),
@@ -384,29 +392,42 @@ function entryOf(v: SessionView, state: AttentionEntry['state']): AttentionEntry
     since: v.effectiveSince,
     reason: reasonOf(v),
     title: taskTitle(v),
-    focusable: focusableOf(v),
+    focusable: focusableOf(v, terminal),
     summary: deskSummaryOf(v),
   };
 }
 
 /** Longest wait first (needs you) and oldest first (done): both by `since`, then by id. */
-function attentionOf(views: readonly SessionView[], state: AttentionEntry['state']): AttentionEntry[] {
+function attentionOf(views: readonly SessionView[], state: AttentionEntry['state'], terminal: TerminalKind): AttentionEntry[] {
   return views
     .filter((v) => v.effectiveState === state)
     .sort((a, b) => a.effectiveSince - b.effectiveSince || byCodeUnit(a.id, b.id))
-    .map((v) => entryOf(v, state));
+    .map((v) => entryOf(v, state, terminal));
 }
+
+/** The terminal a scene is built for: tmux, with nothing known of its reach, unless the collector says otherwise. */
+export interface SceneTerminalOptions {
+  kind: TerminalKind;
+  reachable: boolean | null;
+}
+export const DEFAULT_TERMINAL: SceneTerminalOptions = { kind: 'tmux', reachable: null };
 
 /**
  * The building every client sees: floors top to bottom, each from its seating in `seating` (a floor with none there is
  * seated from scratch), and the attention queue.
  */
-export function buildScene(views: readonly SessionView[], firstSeen?: ReadonlyMap<string, number>, seating?: ReadonlyMap<string, Seating>): BuildingScene {
+export function buildScene(
+  views: readonly SessionView[],
+  firstSeen?: ReadonlyMap<string, number>,
+  seating?: ReadonlyMap<string, Seating>,
+  terminal: SceneTerminalOptions = DEFAULT_TERMINAL,
+): BuildingScene {
   const floors = buildFloors(views, firstSeen);
   return {
     version: SCENE_VERSION,
+    terminal: terminalOf(views, terminal.kind, terminal.reachable),
     floors: floors.map((f, i) => summaryOf(f, floors.length - i, seating?.get(f.key) ?? seatFloor(null, f))),
-    attention: { needsYou: attentionOf(views, 'needs_you'), done: attentionOf(views, 'done') },
+    attention: { needsYou: attentionOf(views, 'needs_you', terminal.kind), done: attentionOf(views, 'done', terminal.kind) },
   };
 }
 
@@ -414,10 +435,16 @@ export function buildScene(views: readonly SessionView[], firstSeen?: ReadonlyMa
  * One floor in detail: its plan, filled from its seating in `seating` (a floor with none there is seated from scratch).
  * Null when no live session is on it.
  */
-export function buildFloorDetail(views: readonly SessionView[], key: string, firstSeen?: ReadonlyMap<string, number>, seating?: ReadonlyMap<string, Seating>): FloorDetail | null {
+export function buildFloorDetail(
+  views: readonly SessionView[],
+  key: string,
+  firstSeen?: ReadonlyMap<string, number>,
+  seating?: ReadonlyMap<string, Seating>,
+  terminal: TerminalKind = DEFAULT_TERMINAL.kind,
+): FloorDetail | null {
   const floors = buildFloors(views, firstSeen);
   const i = floors.findIndex((f) => f.key === key);
   const floor = floors[i];
   if (!floor) return null;
-  return detailOf(floor, floors.length - i, repoLabels(views), seating?.get(key) ?? seatFloor(null, floor));
+  return detailOf(floor, floors.length - i, repoLabels(views), seating?.get(key) ?? seatFloor(null, floor), terminal);
 }

@@ -44,6 +44,17 @@ describe('DeskPanel', () => {
     expect(text(target.querySelector('.p-text'))).toBe('Add idempotency keys to POST /orders');
   });
 
+  it('names the floor\'s terminal where the pane is said, and where Go cannot go', () => {
+    const floor = makeFloor(CHECKOUT)!;
+    floor.terminal = 'herdr';
+    const { target } = panel(CHECKOUT, 'oa-c3', NOW, (d) => (d.pane = 'wK:p2'), floor);
+    expect(text(target.querySelector('.eyebrow'))).toBe('orders-api · herdr pane wK:p2');
+    cleanup();
+    const off = panel(CHECKOUT, 'oa-c3', NOW, (d) => ((d.pane = null), (d.focusable = false)), floor);
+    expect(text(off.target.querySelector('.eyebrow'))).toBe('orders-api · not in herdr');
+    expect(text([...off.target.querySelectorAll('.p-note')].at(-1))).toBe('It does not run in a herdr pane, so there is nowhere to go.');
+  });
+
   it('names the account the session runs under, in the eyebrow and among the facts, when it carries one', () => {
     const { target, facts } = panel(CHECKOUT, 'oa-c3', NOW, (d) => (d.account = 'work@example.com'));
     expect(text(target.querySelector('.eyebrow'))).toBe('orders-api · work@example.com · tmux pane %7');

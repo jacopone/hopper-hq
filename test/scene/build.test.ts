@@ -215,6 +215,21 @@ describe('desks', () => {
     expect(occupants(floors[1]!).map((o) => o.account)).toEqual([null]);
   });
 
+  it('names the terminal, counts the local sessions it reaches, and focuses herdr panes only under herdr', () => {
+    const views = [
+      view('t', ws('/w/api', 'main'), 'working', { tmuxPane: '%12' }),
+      view('h', ws('/w/api', 'main'), 'working', { tmuxPane: 'wK:p2' }),
+      view('c', ws('/w/api', 'main'), 'working', { location: 'cloud', tmuxPane: 'wK:p3' }),
+      view('n', ws('/w/api', 'main'), 'working', { tmuxPane: null }),
+    ];
+    expect(buildScene(views).terminal).toEqual({ kind: 'tmux', reachable: null, mapped: 1, local: 3 });
+    expect(buildScene(views, undefined, undefined, { kind: 'herdr', reachable: true }).terminal).toEqual({ kind: 'herdr', reachable: true, mapped: 1, local: 3 });
+    const under = (kind: 'tmux' | 'herdr') => occupants(buildFloorDetail(views, 'repo:/w/api', undefined, undefined, kind)!).map((d) => [d.sessionId, d.focusable]);
+    expect(under('tmux')).toEqual([['c', false], ['h', false], ['n', false], ['t', true]]);
+    expect(under('herdr')).toEqual([['c', false], ['h', true], ['n', false], ['t', false]]);
+    expect(buildFloorDetail(views, 'repo:/w/api', undefined, undefined, 'herdr')!.terminal).toBe('herdr');
+  });
+
   it('reports a running tool, else the last action, and counts running agents', () => {
     const desks = occupants(buildFloorDetail([
       view('a', ws('/w/api', 'main'), 'no_signal', { openTool: { id: 't1', label: 'Bash: npm test', startedAt: NOW - 30 * MIN }, lastAction: 'Bash: npm test', lastActionAt: NOW - 30 * MIN }),
@@ -471,12 +486,12 @@ describe('wait reasons', () => {
   });
 });
 
-describe('version 5', () => {
-  it('gives floors, desks and attention entries no rooms, interns, runs, summary or account while their sessions have none', () => {
+describe('version 6', () => {
+  it('gives floors, desks and attention entries no rooms, interns, runs, summary or account while their sessions have none, and tmux for a terminal', () => {
     const views = [view('a', ws('/w/api', 'main'), 'done')];
     const floor = buildFloorDetail(views, 'repo:/w/api')!;
-    expect(SCENE_VERSION).toBe(5);
-    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts]).toEqual([5, [], 0, [], []]);
+    expect(SCENE_VERSION).toBe(6);
+    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([6, [], 0, [], [], 'tmux']);
     const desk = occupants(floor)[0]!;
     expect([desk.summary, desk.interns, desk.internsMore, desk.at, desk.runs, desk.account]).toEqual([null, [], 0, { kind: 'desk' }, [], null]);
     const done = buildScene(views).attention.done[0]!;

@@ -313,8 +313,10 @@ export function makeScene(): BuildingScene {
       .filter((x) => x.d.state === state)
       .sort((a, b) => a.d.since - b.d.since)
       .map((x) => entry(x.f, x.c, x.d, state));
+  const local = all.filter((x) => (x.d.location ?? 'local') === 'local');
   return {
     version: SCENE_VERSION,
+    terminal: { kind: 'tmux', reachable: null, mapped: local.filter((x) => focusable(x.d)).length, local: local.length },
     floors: FLOORS.map((f, i) => summary(f, FLOORS.length - i)),
     attention: { needsYou: queue('needs_you'), done: queue('done') },
   };
@@ -327,6 +329,7 @@ export function makeFloor(key: string): FloorDetail | null {
   const { plan, pods } = podsOf(f);
   const { windows: _windows, ...rest } = summary(f, FLOORS.length - index);
   return {
+    terminal: 'tmux',
     version: SCENE_VERSION,
     ...rest,
     size: plan.size,
