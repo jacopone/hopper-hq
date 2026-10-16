@@ -27,6 +27,7 @@ export function newSession(id: string, ts: number, workspace: Workspace): Sessio
     tmuxPane: null,
     tmuxSession: null,
     account: null,
+    task: null,
     transcriptPath: null,
     workspace,
     state: 'idle',
@@ -247,6 +248,8 @@ export function applyEvent(prev: Session | undefined, e: CollectorEvent): Sessio
     case 'pane':
       // The terminal's word on where the session is: a pane from a session file, written at start, may be stale by now.
       return s.tmuxPane === e.pane ? s : { ...s, tmuxPane: e.pane, tmuxSession: null };
+    case 'task':
+      return s.task === e.task ? s : { ...s, task: e.task };
     case 'title':
       return { ...s, title: e.title };
     case 'branch':
@@ -422,6 +425,7 @@ export function normalizeSession(raw: Session): Session {
     lastPromptAt: raw.lastPromptAt ?? null,
     summary: raw.summary ?? null,
     account: raw.account ?? null,
+    task: raw.task ?? null,
   };
   return s.state === 'in_meeting' && !liveWork(s) ? { ...s, state: 'done' } : s;
 }

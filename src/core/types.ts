@@ -1,6 +1,84 @@
 /** The terminal multiplexer the sessions run in: it names the panes, and Go reaches a session through it. */
 export type TerminalKind = 'tmux' | 'herdr';
 
+/** One reading of an account's allowance window. */
+export interface Allowance {
+  usedPct: number;
+  resetsAt: number | null;
+  /** When the reading was written (ms). */
+  readAt: number;
+}
+
+/** An account the team can work under: an elevator in the Lobby. */
+export interface Seat {
+  /** The account: an email, or the label its gatekeeper gives it. */
+  account: string;
+  /** A short name for its sign ('Leonardo'). */
+  name: string;
+  /** The five-hour window. */
+  session: Allowance | null;
+  /** The seven-day window. */
+  week: Allowance | null;
+  /** The seat the team uses now. */
+  current: boolean;
+  /** Over the gatekeeper's limit: the cabin is full. */
+  full: boolean;
+  /** No reading, or one older than the gatekeeper's staleness window. */
+  stale: boolean;
+  /** Takes turns: a seat outside the rota (a personal account) is shown but never offered. */
+  turnable: boolean;
+}
+
+export type GateReasonKind = 'memory' | 'load' | 'disk' | 'pressure' | 'slice' | 'pacing' | 'rebuild' | 'cap' | 'other';
+export interface GateReason {
+  kind: GateReasonKind;
+  text: string;
+}
+
+/** The gate's last word. */
+export interface GateVerdict {
+  go: boolean;
+  text: string;
+  reasons: GateReason[];
+  at: number;
+}
+
+/** A launch waiting outside. */
+export interface Waiting {
+  /** The orchestrator's id for it ('G-270'); unique in the queue. */
+  id: string;
+  name: string;
+  account: string | null;
+  since: number;
+  reason: GateReason | null;
+}
+
+/** The sessions' memory against their cap. */
+export interface Power {
+  usedBytes: number;
+  /** Null when there is no cap. */
+  maxBytes: number | null;
+  /** The watchdog's mark, as a percentage of maxBytes. */
+  warnPct: number;
+  /** The watchdog holds every launch. */
+  held: boolean;
+  /** Panes of the sessions the watchdog paused and has not released. */
+  pausedPanes: string[];
+}
+
+/** What a gatekeeper shows in the Lobby (design 2026-10-16 §3). */
+export interface Lobby {
+  doorman: { name: string };
+  gate: GateVerdict | null;
+  queue: Waiting[];
+  seats: Seat[];
+  /** The account to take next when the current seat is full; null when none has margin. */
+  turnTo: string | null;
+  power: Power | null;
+  cap: { working: number | null; max: number | null } | null;
+  updatedAt: number;
+}
+
 /** Lifecycle states of a session. Time-based ones (idle, dormant, no_signal) are also derived at read time, see core/view.ts. */
 export type SessionState =
   | 'working'
@@ -124,6 +202,8 @@ export interface Session {
   tmuxSession: string | null;
   /** The account its config directory stands for (an email, or a label given for the directory); null when there is one directory and nothing to tell apart. */
   account: string | null;
+  /** The orchestrator's task id ('G-268'): from the session's name, else from the gatekeeper. Null when none. */
+  task: string | null;
   transcriptPath: string | null;
   workspace: Workspace;
   state: SessionState;
@@ -158,8 +238,8 @@ export interface Session {
   seenAt: number | null;
 }
 
-/** 'terminal': the multiplexer's own listing (herdr), which says which pane a session is in. */
-export type EventSourceKind = 'hook' | 'fs' | 'demo' | 'terminal';
+/** 'terminal': the multiplexer's own listing (herdr), which says which pane a session is in. 'gatekeeper': the orchestrator's files, which name each session's task. */
+export type EventSourceKind = 'hook' | 'fs' | 'demo' | 'terminal' | 'gatekeeper';
 
 interface EventBase {
   sessionId: string;
@@ -188,6 +268,8 @@ export type CollectorEvent = EventBase &
     | { type: 'session.started' }
     /** The pane the terminal shows the session in; null when it shows it in none any more. Only a known session takes it. */
     | { type: 'pane'; pane: string | null }
+    /** The task the gatekeeper's registry gives the session; null when it lists none. Only a known session takes it. */
+    | { type: 'task'; task: string | null }
     | { type: 'session.status'; status: 'busy' | 'idle' | 'waiting'; waitingFor: string | null }
     | { type: 'branch'; branch: string | null }
     | { type: 'title'; title: string }

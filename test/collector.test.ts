@@ -21,6 +21,19 @@ function collector(extra: Partial<ConstructorParameters<typeof Collector>[0]> = 
   return new Collector({ resolveWorkspace: resolver, now: () => NOW + 1000, saveDelayMs: 0, ...extra });
 }
 
+describe("the gatekeeper's task events", () => {
+  it('names a known session\'s task, and drops a task for a session it does not know', async () => {
+    const c = collector();
+    await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: 'G-268' });
+    await c.ingest({ type: 'task', sessionId: 'S9', ts: NOW, source: 'gatekeeper', task: 'G-1' });
+    expect(c.session('S1')?.task).toBe('G-268');
+    expect(c.session('S9')).toBeNull();
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: null });
+    expect(c.session('S1')?.task).toBeNull();
+  });
+});
+
 describe('the terminal\'s pane events', () => {
   it('moves a known session to the pane the terminal lists, and drops a pane for a session it does not know', async () => {
     const c = collector({ terminal: 'herdr' });
