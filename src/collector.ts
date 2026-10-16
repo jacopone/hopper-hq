@@ -2,13 +2,14 @@ import type { WorkspaceResolver } from './adapters/git.js';
 import { DEFAULT_THRESHOLDS, type Thresholds } from './config.js';
 import { DEFAULT_FEATURE_RULES, deriveFeature, type FeatureRules } from './core/feature.js';
 import { applyEvent, markSeen, normalizeSession, settleRestored } from './core/reducer.js';
-import type { CollectorEvent, EventSourceKind, RawEvent, Session, SessionSummary, WaitReason } from './core/types.js';
+import type { CollectorEvent, EventSourceKind, Lobby, RawEvent, Session, SessionSummary, WaitReason } from './core/types.js';
 import { buildAttention, buildFloors, floorKeyOf, toView, type Attention, type Floor, type SessionView } from './core/view.js';
 import type { TerminalKind } from './core/terminal.js';
 import { buildFloorDetail, buildScene, DEFAULT_TERMINAL } from './scene/build.js';
+import { buildLobbyDetail } from './scene/lobby.js';
 import { parseSeating, seatFloor, type Seating } from './scene/seating.js';
 import { cleanOrNull, cleanText, isSessionId, taskTitle } from './scene/text.js';
-import type { BuildingScene, FloorDetail } from './scene/types.js';
+import type { BuildingScene, FloorDetail, LobbyDetail } from './scene/types.js';
 import type { FloorRecord, Store } from './store/store.js';
 
 export interface Snapshot {
@@ -96,6 +97,8 @@ export class Collector {
   ignored = 0;
   /** Whether the terminal answered the last time an adapter asked; null until one says, and always for tmux. */
   private terminalReachable: boolean | null = null;
+  /** The gatekeeper's Lobby, as its provider last gave it; null without one. */
+  private lobbyState: Lobby | null = null;
 
   constructor(private readonly o: CollectorOptions) {
     this.now = o.now ?? Date.now;
@@ -378,10 +381,33 @@ export class Collector {
     for (const fn of this.listeners) fn();
   }
 
-  /** The building every browser sees: façade, floor directory and attention. */
+  /** The gatekeeper's provider hands a whole Lobby each time it changes. A change is news to every browser. */
+  setLobby(lobby: Lobby | null): void {
+    if (JSON.stringify(lobby) === JSON.stringify(this.lobbyState)) return;
+    this.lobbyState = lobby;
+    for (const fn of this.listeners) fn();
+  }
+
+  lobby(): Lobby | null {
+    return this.lobbyState;
+  }
+
+  /** Each local live session's pane: what a gatekeeper names sessions by. */
+  localPanes(): Map<string, string> {
+    const out = new Map<string, string>();
+    for (const s of this.sessions.values()) if (s.state !== 'ended' && s.location === 'local' && s.tmuxPane) out.set(s.id, s.tmuxPane);
+    return out;
+  }
+
+  /** The Lobby in detail for the browser; null without a gatekeeper. */
+  lobbyDetail(): LobbyDetail | null {
+    return this.lobbyState && buildLobbyDetail(this.lobbyState, this.liveViews());
+  }
+
+  /** The building every browser sees: façade, floor directory, attention and the Lobby's counts. */
   scene(): BuildingScene {
     const views = this.liveViews();
-    return buildScene(views, this.firstSeen, this.seat(views), this.terminal());
+    return buildScene(views, this.firstSeen, this.seat(views), this.terminal(), this.lobbyState);
   }
 
   /** One floor in detail, or null when no live session is on it. */
@@ -396,7 +422,7 @@ export class Collector {
     const seating = this.seat(views);
     const terminal = this.terminal();
     return {
-      scene: buildScene(views, this.firstSeen, seating, terminal),
+      scene: buildScene(views, this.firstSeen, seating, terminal, this.lobbyState),
       floors: new Map(floorKeys.map((key) => [key, buildFloorDetail(views, key, this.firstSeen, seating, terminal.kind)])),
     };
   }

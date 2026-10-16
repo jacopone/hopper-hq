@@ -3,7 +3,7 @@ import { readdirSync, readFileSync } from 'node:fs';
 
 const DIR = new URL('../../src/scene/', import.meta.url);
 /** The server-side modules in src/scene. Every other file there is bundled into the browser. */
-const SERVER_ONLY = new Set(['build.ts', 'seating.ts']);
+const SERVER_ONLY = new Set(['build.ts', 'lobby.ts', 'seating.ts']);
 
 /**
  * Import specifiers that break the browser boundary: a shared scene module may import its shared siblings,

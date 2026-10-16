@@ -3,12 +3,13 @@
  * Pure and deterministic: the same views in any order give the same scene, down to its JSON text. Every string is cleaned.
  */
 import { isPaneOf, type TerminalKind } from '../core/terminal.js';
-import type { WorkflowRun } from '../core/types.js';
+import type { Lobby, WorkflowRun } from '../core/types.js';
 import { liveRun } from '../core/reducer.js';
 import { buildFloors, byCodeUnit, floorKeyOf, islandKeyOf, repoLabels, repoRootOf, type Floor, type SessionView } from '../core/view.js';
 import { INTERNS_MAX, layoutPlan, LOUNGE_SEATS, MEETING_AGENTS_MAX, POD_DESKS, RUNS_SHOWN, UNSEATED_MAX } from './layout.js';
 import { FEATURE_SLOTS, REPO_SLOTS, slotOf } from './palette.js';
 import { CREW_PREFIX, roomRunsOf, seatFloor, type RoomRun, type Seating } from './seating.js';
+import { buildLobbySummary } from './lobby.js';
 import { capKey, cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
 import {
   SCENE_VERSION,
@@ -268,6 +269,7 @@ function occupantOf(v: SessionView, label: (v: SessionView) => string, terminal:
     runs: runsOf(v),
     location: v.location,
     account: cleanOrNull(v.account),
+    task: cleanOrNull(v.task, 64),
     pane: cleanOrNull(v.tmuxPane),
     focusable: focusableOf(v, terminal),
     robot: robotOf(state, repoRootOf(v), v.feature),
@@ -388,6 +390,7 @@ function entryOf(v: SessionView, state: AttentionEntry['state'], terminal: Termi
     name: nameOf(v),
     repo: cleanText(v.workspace.repoName),
     account: cleanOrNull(v.account),
+    task: cleanOrNull(v.task, 64),
     state,
     since: v.effectiveSince,
     reason: reasonOf(v),
@@ -421,11 +424,13 @@ export function buildScene(
   firstSeen?: ReadonlyMap<string, number>,
   seating?: ReadonlyMap<string, Seating>,
   terminal: SceneTerminalOptions = DEFAULT_TERMINAL,
+  lobby: Lobby | null = null,
 ): BuildingScene {
   const floors = buildFloors(views, firstSeen);
   return {
     version: SCENE_VERSION,
     terminal: terminalOf(views, terminal.kind, terminal.reachable),
+    lobby: lobby && buildLobbySummary(lobby),
     floors: floors.map((f, i) => summaryOf(f, floors.length - i, seating?.get(f.key) ?? seatFloor(null, f))),
     attention: { needsYou: attentionOf(views, 'needs_you', terminal.kind), done: attentionOf(views, 'done', terminal.kind) },
   };

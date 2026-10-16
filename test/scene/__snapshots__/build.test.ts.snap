@@ -82,6 +82,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200027,
                 "state": "in_meeting",
                 "summary": null,
+                "task": null,
                 "title": "Support split payments across two cards",
               },
               "rect": {
@@ -125,6 +126,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200022,
                 "state": "done",
                 "summary": null,
+                "task": null,
                 "title": "Rewrite checkout copy and empty states",
               },
               "rect": {
@@ -188,6 +190,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200000,
                 "state": "working",
                 "summary": null,
+                "task": null,
                 "title": "Build the address step of the new checkout",
               },
               "rect": {
@@ -264,6 +267,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200024,
                 "state": "needs_you",
                 "summary": null,
+                "task": null,
                 "title": "Add idempotency keys to POST /orders",
               },
               "rect": {
@@ -440,7 +444,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 6,
+      "version": 7,
     },
     {
       "accounts": [],
@@ -509,6 +513,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200004,
                 "state": "working",
                 "summary": null,
+                "task": null,
                 "title": "Tune BM25 weights with click data",
               },
               "rect": {
@@ -651,7 +656,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 6,
+      "version": 7,
     },
     {
       "accounts": [],
@@ -721,6 +726,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200006,
                 "state": "working",
                 "summary": null,
+                "task": null,
                 "title": "Bump dependencies and fix type errors",
               },
               "rect": {
@@ -769,6 +775,7 @@ exports[`the demo building > matches the snapshot 1`] = `
                 "since": 1791709200029,
                 "state": "needs_you",
                 "summary": null,
+                "task": null,
                 "title": "Investigate duplicate confirmation emails",
               },
               "rect": {
@@ -900,7 +907,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 6,
+      "version": 7,
     },
   ],
   "scene": {
@@ -917,6 +924,7 @@ exports[`the demo building > matches the snapshot 1`] = `
           "since": 1791709200022,
           "state": "done",
           "summary": null,
+          "task": null,
           "title": "Rewrite checkout copy and empty states",
         },
       ],
@@ -937,6 +945,7 @@ exports[`the demo building > matches the snapshot 1`] = `
           "since": 1791709200024,
           "state": "needs_you",
           "summary": null,
+          "task": null,
           "title": "Add idempotency keys to POST /orders",
         },
         {
@@ -955,6 +964,7 @@ exports[`the demo building > matches the snapshot 1`] = `
           "since": 1791709200029,
           "state": "needs_you",
           "summary": null,
+          "task": null,
           "title": "Investigate duplicate confirmation emails",
         },
       ],
@@ -1114,13 +1124,14 @@ exports[`the demo building > matches the snapshot 1`] = `
         ],
       },
     ],
+    "lobby": null,
     "terminal": {
       "kind": "tmux",
       "local": 7,
       "mapped": 7,
       "reachable": null,
     },
-    "version": 6,
+    "version": 7,
   },
 }
 `;

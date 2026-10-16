@@ -44,6 +44,23 @@ describe("the gatekeeper's task events", () => {
   });
 });
 
+describe('the Lobby', () => {
+  it('keeps the gatekeeper\'s Lobby, tells the listeners of a change only, and serves its detail', async () => {
+    const c = collector();
+    let told = 0;
+    c.onChange(() => told++);
+    const lobby = { doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: { working: 1, max: 7 }, updatedAt: NOW };
+    expect(c.scene().lobby).toBeNull();
+    c.setLobby(lobby);
+    c.setLobby({ ...lobby });
+    expect(told).toBe(1);
+    expect(c.scene().lobby).toEqual({ waiting: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW });
+    expect(c.lobbyDetail()).toMatchObject({ version: 7, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
+    await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, tmuxPane: 'wK:p2' }));
+    expect([...c.localPanes()]).toEqual([['S1', 'wK:p2']]);
+  });
+});
+
 describe('the terminal\'s pane events', () => {
   it('moves a known session to the pane the terminal lists, and drops a pane for a session it does not know', async () => {
     const c = collector({ terminal: 'herdr' });

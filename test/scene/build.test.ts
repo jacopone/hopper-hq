@@ -230,6 +230,14 @@ describe('desks', () => {
     expect(buildFloorDetail(views, 'repo:/w/api', undefined, undefined, 'herdr')!.terminal).toBe('herdr');
   });
 
+  it('carries a session\'s task to its desk and its attention entry', () => {
+    const views = [view('a', ws('/w/api', 'main'), 'needs_you', { task: 'G-268' }), view('b', ws('/w/api', 'main'), 'working')];
+    const { scene, floors } = render(views);
+    expect(occupants(floors[0]!).map((o) => [o.sessionId, o.task])).toEqual([['a', 'G-268'], ['b', null]]);
+    expect(scene.attention.needsYou[0]!.task).toBe('G-268');
+    expect(scene.lobby).toBeNull();
+  });
+
   it('reports a running tool, else the last action, and counts running agents', () => {
     const desks = occupants(buildFloorDetail([
       view('a', ws('/w/api', 'main'), 'no_signal', { openTool: { id: 't1', label: 'Bash: npm test', startedAt: NOW - 30 * MIN }, lastAction: 'Bash: npm test', lastActionAt: NOW - 30 * MIN }),
@@ -486,16 +494,17 @@ describe('wait reasons', () => {
   });
 });
 
-describe('version 6', () => {
-  it('gives floors, desks and attention entries no rooms, interns, runs, summary or account while their sessions have none, and tmux for a terminal', () => {
+describe('version 7', () => {
+  it('gives floors, desks and attention entries no rooms, interns, runs, summary, account or task while their sessions have none, tmux for a terminal, and no lobby', () => {
     const views = [view('a', ws('/w/api', 'main'), 'done')];
     const floor = buildFloorDetail(views, 'repo:/w/api')!;
-    expect(SCENE_VERSION).toBe(6);
-    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([6, [], 0, [], [], 'tmux']);
+    expect(SCENE_VERSION).toBe(7);
+    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([7, [], 0, [], [], 'tmux']);
     const desk = occupants(floor)[0]!;
-    expect([desk.summary, desk.interns, desk.internsMore, desk.at, desk.runs, desk.account]).toEqual([null, [], 0, { kind: 'desk' }, [], null]);
-    const done = buildScene(views).attention.done[0]!;
-    expect([done.summary, done.account]).toEqual([null, null]);
+    expect([desk.summary, desk.interns, desk.internsMore, desk.at, desk.runs, desk.account, desk.task]).toEqual([null, [], 0, { kind: 'desk' }, [], null, null]);
+    const scene = buildScene(views);
+    const done = scene.attention.done[0]!;
+    expect([done.summary, done.account, done.task, scene.lobby]).toEqual([null, null, null, null]);
   });
 });
 

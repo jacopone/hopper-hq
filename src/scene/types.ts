@@ -3,9 +3,9 @@
  * Every string is cleaned by the server (control and bidi characters removed, length capped).
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
-import type { RunStatus, SessionState, TerminalKind, WaitKind } from '../core/types.js';
+import type { GateVerdict, Lobby, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting } from '../core/types.js';
 
-export const SCENE_VERSION = 6;
+export const SCENE_VERSION = 7;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -53,6 +53,8 @@ export interface AttentionEntry {
   repo: string;
   /** The account the session runs under; null when the sessions carry none. */
   account: string | null;
+  /** The orchestrator's task id; null when none. */
+  task: string | null;
   state: 'needs_you' | 'done';
   since: number;
   reason: SceneReason | null;
@@ -73,9 +75,42 @@ export interface SceneTerminal {
   local: number;
 }
 
+/** What the façade says of the Lobby. */
+export interface LobbySummary {
+  waiting: number;
+  seatsFull: number;
+  /** Used memory as a percentage of the cap; null without a cap or a reading. */
+  powerPct: number | null;
+  held: boolean;
+  paused: number;
+  updatedAt: number;
+}
+
+/** A paused session, by the pane the watchdog named. */
+export interface PausedSession {
+  pane: string;
+  sessionId: string | null;
+  name: string | null;
+}
+
+/** The Lobby in detail: the gatekeeper's Lobby, cleaned, with the paused panes resolved to sessions. */
+export interface LobbyDetail {
+  version: typeof SCENE_VERSION;
+  doorman: { name: string; sessionId: string | null };
+  gate: GateVerdict | null;
+  queue: Waiting[];
+  seats: Seat[];
+  turnTo: string | null;
+  power: (Power & { paused: PausedSession[] }) | null;
+  cap: Lobby['cap'];
+  updatedAt: number;
+}
+
 export interface BuildingScene {
   version: typeof SCENE_VERSION;
   terminal: SceneTerminal;
+  /** The gatekeeper's Lobby; null when none is configured. */
+  lobby: LobbySummary | null;
   /** Top to bottom: newest first-seen first. */
   floors: FloorSummary[];
   /** needsYou: longest wait first. done: oldest first. */
@@ -205,6 +240,8 @@ export interface Occupant {
   location: 'local' | 'cloud';
   /** The account the session runs under (an email, or the label of its config directory); null when the sessions carry none. */
   account: string | null;
+  /** The orchestrator's task id; null when none. */
+  task: string | null;
   /** The pane id for display, as the terminal writes it ('%N' in tmux, 'wK:p2' in herdr); focus goes through POST /api/focus by sessionId. */
   pane: string | null;
   focusable: boolean;
