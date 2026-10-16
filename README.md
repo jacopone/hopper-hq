@@ -102,6 +102,16 @@ To run the daemon in the foreground instead, in its own tmux window or terminal,
 
 This already works from the files Claude Code writes, without the mod.
 
+### Several accounts on one machine
+
+hopper-hq watches Claude Code's config directory, `~/.claude` or `$CLAUDE_CONFIG_DIR`. When several accounts run on the machine, each with its own `CLAUDE_CONFIG_DIR`, name every directory, each with an optional label after `=`:
+
+```sh
+hopper-hq up --claude-dir ~/.claude=me@work.example --claude-dir ~/.claude-home=me@home.example
+```
+
+Every session then carries its account: on its desk, in its row on the floor, in the directory of the building and in the bar at the top. A directory without a label is named after the account signed into it (from its `.claude.json`), else after the directory. With one directory and no label, nothing is shown. `HOPPER_HQ_CLAUDE_DIRS` names the same list for a daemon started by a service, one entry per path separator (`:` on macOS and Linux).
+
 ## The building
 
 `hopper-hq ui` signs your browser in and opens the building. The daemon must be running. With `--no-open` it only prints the link.
@@ -286,7 +296,7 @@ Each summary is one call to the model, a small one by default. A session gets at
 | --- | --- |
 | `hopper-hq up` | Starts the daemon in the background unless it is running, then opens the building like `ui`. Use `--no-open` to print the link only. |
 | `hopper-hq down` | Stops the daemon. |
-| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. |
+| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine). |
 | `hopper-hq status` | Prints a summary. Use `--format text`, `tmux` or `json`. |
 | `hopper-hq ls` | Lists floors and their sessions. |
 | `hopper-hq ack` | Marks finished sessions as seen. |

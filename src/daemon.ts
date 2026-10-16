@@ -4,6 +4,7 @@ import type { Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { accountLabels } from './adapters/claude-code/account.js';
 import { FsAdapter } from './adapters/claude-code/fs-adapter.js';
 import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
@@ -24,9 +25,12 @@ import { Summarizer } from './summary/summarizer.js';
 
 export interface DaemonOptions {
   port?: number;
+  /** One Claude Code config directory to watch: shorthand for `claudeDirs: [dir]`. */
   claudeDir?: string;
+  /** The config directories to watch, 'DIR' or 'DIR=LABEL' each: one per account when several accounts run on the machine. */
+  claudeDirs?: string[];
   dataDir?: string;
-  /** Watch ~/.claude on disk (default true). The mod works either way. */
+  /** Watch the config directories on disk (default true). The mod works either way. */
   watchFiles?: boolean;
   log?: (line: string) => void;
   /** Serve scripted demo sessions from memory; ignore hooks and files. */
@@ -181,10 +185,12 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
     throw err;
   }
 
+  // What each directory's sessions are called: the label given, else, among several, the account signed into it.
+  const labels = watchFiles ? await accountLabels(paths.claudeDirs) : null;
   const fsAdapter = !watchFiles
     ? null
     : new FsAdapter({
-        claudeDir: paths.claudeDir,
+        claudeDirs: paths.claudeDirs.map((d) => ({ dir: d.dir, account: labels?.get(d.dir) ?? null })),
         emit: (e) => void collector.ingest(e),
         resolveWorkspace,
         ignoreCwd,
@@ -200,6 +206,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   fsAdapter?.start();
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
+  if (labels && paths.claudeDirs.length > 1) log(`hopper-hq watches ${paths.claudeDirs.length} config directories: ${paths.claudeDirs.map((d) => `${d.dir} (${labels.get(d.dir)})`).join(', ')}`);
 
   return {
     port,

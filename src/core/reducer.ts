@@ -26,6 +26,7 @@ export function newSession(id: string, ts: number, workspace: Workspace): Sessio
     name: null,
     tmuxPane: null,
     tmuxSession: null,
+    account: null,
     transcriptPath: null,
     workspace,
     state: 'idle',
@@ -239,6 +240,7 @@ export function applyEvent(prev: Session | undefined, e: CollectorEvent): Sessio
         name: e.name ?? s.name,
         // A pane and its tmux session come from one tmux field: take them together.
         ...(e.tmuxPane != null ? { tmuxPane: e.tmuxPane, tmuxSession: e.tmuxSession ?? null } : {}),
+        account: e.account ?? s.account,
         transcriptPath: e.transcriptPath ?? s.transcriptPath,
         startedAt: Math.min(s.startedAt, e.startedAt ?? s.startedAt),
       };
@@ -416,6 +418,7 @@ export function normalizeSession(raw: Session): Session {
     lastAnswerAt: raw.lastAnswerAt ?? null,
     lastPromptAt: raw.lastPromptAt ?? null,
     summary: raw.summary ?? null,
+    account: raw.account ?? null,
   };
   return s.state === 'in_meeting' && !liveWork(s) ? { ...s, state: 'done' } : s;
 }

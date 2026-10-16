@@ -119,6 +119,8 @@ export interface Session {
   tmuxPane: string | null;
   /** The tmux session the pane is in, as Claude Code wrote it; null when unknown. Pane ids are per tmux server: this tells two %N apart. */
   tmuxSession: string | null;
+  /** The account its config directory stands for (an email, or a label given for the directory); null when there is one directory and nothing to tell apart. */
+  account: string | null;
   transcriptPath: string | null;
   workspace: Workspace;
   state: SessionState;
@@ -175,6 +177,7 @@ export type CollectorEvent = EventBase &
         name?: string | null;
         tmuxPane?: string | null;
         tmuxSession?: string | null;
+        account?: string | null;
         transcriptPath?: string | null;
         startedAt?: number;
       }

@@ -396,7 +396,7 @@ describe('FsAdapter with workflow runs', () => {
     await writeEnd(R2, { status: 'completed' }, OLD);
     await writeRun(R1, [started('a1', 'plan:orders', 'Plan')], NEW, { a1: 'workflow-subagent' });
     const a = new FsAdapter({
-      claudeDir: root,
+      claudeDirs: [{ dir: root, account: null }],
       emit: (e) => events.push(e),
       resolveWorkspace: async (cwd) => ({ cwd, repoRoot: cwd, repoName: 'payments-svc', worktree: false, branch: 'feat/checkout-v2' }),
       probe: async (pids) => new Map(pids.map((p) => [p, T0 - 1000])),
@@ -421,7 +421,7 @@ describe('FsAdapter with workflow runs', () => {
     let alive = true;
     let now = NOW;
     const a = new FsAdapter({
-      claudeDir: root,
+      claudeDirs: [{ dir: root, account: null }],
       emit: (e) => events.push(e),
       resolveWorkspace: async (cwd) => ({ cwd, repoRoot: cwd, repoName: 'payments-svc', worktree: false, branch: 'feat/checkout-v2' }),
       probe: async (pids) => new Map(alive ? pids.map((p) => [p, T0 - 1000]) : []),
@@ -446,7 +446,7 @@ describe('FsAdapter with workflow runs', () => {
     await writeRun(R2, [started('b1', 'before the restart', 'Plan')], OLD);
     const asked: string[] = [];
     const a = new FsAdapter({
-      claudeDir: root,
+      claudeDirs: [{ dir: root, account: null }],
       emit: (e) => events.push(e),
       resolveWorkspace: async (cwd) => ({ cwd, repoRoot: cwd, repoName: 'payments-svc', worktree: false, branch: 'feat/checkout-v2' }),
       probe: async (pids) => new Map(pids.map((p) => [p, T0 - 1000])),

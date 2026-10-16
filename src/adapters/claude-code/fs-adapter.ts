@@ -7,8 +7,15 @@ import { isSameProcess, psProbe, readSessionsDir, type LiveSessionFile, type Pro
 import { parseTranscriptLine } from './transcript.js';
 import { readAgentMeta, WorkflowScanner } from './workflows.js';
 
+/** A config directory to watch, and the account its sessions carry (null: none to show). */
+export interface WatchedDir {
+  dir: string;
+  account: string | null;
+}
+
 export interface FsAdapterOptions {
-  claudeDir: string;
+  /** The config directories to watch, at least one. A session is tracked from the first directory that shows it. */
+  claudeDirs: readonly WatchedDir[];
   emit: (e: RawEvent) => void;
   resolveWorkspace: WorkspaceResolver;
   probe?: ProcessProbe;
@@ -29,6 +36,8 @@ export interface FsAdapterOptions {
 
 interface Tracked {
   file: LiveSessionFile;
+  /** The directory whose session file showed it: its transcript lives in that directory's projects. */
+  from: WatchedDir;
   transcript: string | null;
   tail: TailState | null;
   branch: string | null;
@@ -99,19 +108,30 @@ export class FsAdapter {
 
   private async scan(): Promise<void> {
     const now = this.now();
-    const files = await readSessionsDir(join(this.o.claudeDir, 'sessions'));
-    if (!files) return;
-    const starts = await this.probe(files.map((f) => f.pid), now);
+    // Every directory's session files, each with the directory it came from. One that could not be read shows nothing.
+    const files: { f: LiveSessionFile; from: WatchedDir }[] = [];
+    let read = 0;
+    for (const from of this.o.claudeDirs) {
+      const list = await readSessionsDir(join(from.dir, 'sessions'));
+      if (!list) continue;
+      read++;
+      for (const f of list) files.push({ f, from });
+    }
+    if (read === 0) return;
+    const starts = await this.probe(
+      files.map(({ f }) => f.pid),
+      now,
+    );
     // A scan that could not read looks like "no live session": it changes nothing, so it cannot end any.
     if (!starts) return;
     const live = new Set<string>();
 
-    for (const f of files) {
+    for (const { f, from } of files) {
       if (!isSameProcess(f, starts.get(f.pid)) || live.has(f.sessionId) || this.o.ignoreCwd?.(f.cwd)) continue;
       live.add(f.sessionId);
       let t = this.tracked.get(f.sessionId);
       if (!t || t.ended) {
-        t = await this.discover(f, now);
+        t = await this.discover(f, from, now);
         this.tracked.set(f.sessionId, t);
       }
       t.file = f;
@@ -123,8 +143,10 @@ export class FsAdapter {
       await this.scanSubagents(t, now);
     }
 
+    // Only the directories read this time can say that a session is gone: one that could not be read says nothing of its own.
+    const unread = new Set(this.o.claudeDirs.filter((d) => !files.some((x) => x.from === d)).map((d) => d.dir));
     for (const [id, t] of this.tracked) {
-      if (t.ended || live.has(id)) continue;
+      if (t.ended || live.has(id) || (unread.has(t.from.dir) && read < this.o.claudeDirs.length)) continue;
       t.ended = true;
       // A run that ended just before its process did left its end file: it is read before the session ends.
       if (t.transcript) await t.workflows.scan(sessionDirOf(t.transcript), now);
@@ -137,7 +159,7 @@ export class FsAdapter {
     }
   }
 
-  private async announce(f: LiveSessionFile, transcript: string | null, now: number): Promise<void> {
+  private async announce(f: LiveSessionFile, from: WatchedDir, transcript: string | null, now: number): Promise<void> {
     const workspace = await this.o.resolveWorkspace(f.cwd);
     this.o.emit({
       type: 'session.seen',
@@ -150,15 +172,17 @@ export class FsAdapter {
       name: f.name,
       tmuxPane: f.tmuxPane,
       tmuxSession: f.tmuxSession,
+      account: from.account,
       transcriptPath: transcript,
       startedAt: f.startedAt || now,
     });
   }
 
-  private async discover(f: LiveSessionFile, now: number): Promise<Tracked> {
-    const transcript = await this.findTranscript(f.sessionId, f.cwd);
+  private async discover(f: LiveSessionFile, from: WatchedDir, now: number): Promise<Tracked> {
+    const transcript = await this.findTranscript(from.dir, f.sessionId, f.cwd);
     const t: Tracked = {
       file: f,
+      from,
       transcript,
       tail: null,
       branch: null,
@@ -171,7 +195,7 @@ export class FsAdapter {
       lastTranscriptLookup: now,
       ended: false,
     };
-    await this.announce(f, transcript, now);
+    await this.announce(f, from, transcript, now);
     if (transcript) await this.backfill(t, transcript);
     return t;
   }
@@ -203,10 +227,10 @@ export class FsAdapter {
     }
     if (now - t.lastTranscriptLookup < (this.o.transcriptRetryMs ?? 5000)) return;
     t.lastTranscriptLookup = now;
-    const found = await this.findTranscript(t.file.sessionId, t.file.cwd);
+    const found = await this.findTranscript(t.from.dir, t.file.sessionId, t.file.cwd);
     if (!found) return;
     t.transcript = found;
-    await this.announce(t.file, found, now);
+    await this.announce(t.file, t.from, found, now);
     await this.backfill(t, found);
   }
 
@@ -229,8 +253,8 @@ export class FsAdapter {
     }
   }
 
-  private async findTranscript(sessionId: string, cwd: string): Promise<string | null> {
-    const projects = join(this.o.claudeDir, 'projects');
+  private async findTranscript(claudeDir: string, sessionId: string, cwd: string): Promise<string | null> {
+    const projects = join(claudeDir, 'projects');
     const direct = join(projects, encodeProjectDir(cwd), `${sessionId}.jsonl`);
     if (await exists(direct)) return direct;
     let dirs: string[];

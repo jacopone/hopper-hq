@@ -34,7 +34,7 @@
             {#if f.counts.done}<span class="cnt-done"><span aria-hidden="true">✓</span>{f.counts.done}<span class="visually-hidden">{' done'}</span></span>{/if}
             {#if f.shutters}<span class="cnt-shut">shut</span>{/if}
           </span>
-          <span class="fl-meta">{`${floorWhat(f, Infinity)} · ${plural(sessionsOf(f), 'session', 'sessions')}`}</span>
+          <span class="fl-meta">{`${floorWhat(f, Infinity)} · ${plural(sessionsOf(f), 'session', 'sessions')}${f.accounts.length > 0 ? ` · ${f.accounts.join(', ')}` : ''}`}</span>
         </button>
       </li>
     {/each}

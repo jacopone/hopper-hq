@@ -71,8 +71,9 @@ describe('up', () => {
     const open = async (url: string) => void opened.push(url);
     try {
       const first = capture();
-      expect(await main(['up', '--port', '0', '--data-dir', dataDir, '--claude-dir', claudeDir], { ...first.io, open, spawnDaemon: bg.spawnDaemon })).toBe(0);
-      expect(bg.calls).toEqual([{ args: ['--data-dir', dataDir, '--port', '0', '--claude-dir', claudeDir], log }]);
+      // Each config directory is passed on, made absolute, with its label as given.
+      expect(await main(['up', '--port', '0', '--data-dir', dataDir, '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`], { ...first.io, open, spawnDaemon: bg.spawnDaemon })).toBe(0);
+      expect(bg.calls).toEqual([{ args: ['--data-dir', dataDir, '--port', '0', '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`], log }]);
       expect(first.err).toEqual([
         `Started hopper-hq in the background. Its log is ${log}`,
         `Stop it with: hopper-hq down --data-dir ${dataDir}`,
@@ -200,7 +201,7 @@ describe('up', () => {
     }
     const h = capture();
     await main(['--help'], h.io);
-    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR] [--data-dir DIR]');
+    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--data-dir DIR]');
   });
 });
 

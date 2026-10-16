@@ -44,6 +44,14 @@ describe('DeskPanel', () => {
     expect(text(target.querySelector('.p-text'))).toBe('Add idempotency keys to POST /orders');
   });
 
+  it('names the account the session runs under, in the eyebrow and among the facts, when it carries one', () => {
+    const { target, facts } = panel(CHECKOUT, 'oa-c3', NOW, (d) => (d.account = 'work@example.com'));
+    expect(text(target.querySelector('.eyebrow'))).toBe('orders-api · work@example.com · tmux pane %7');
+    expect(facts().Account).toBe('work@example.com');
+    cleanup();
+    expect(panel(CHECKOUT, 'oa-c3').facts().Account).toBeUndefined();
+  });
+
   it('says in words when the session has no desk: it waits for a free one, or is dormant', () => {
     const floor = makeFloor(CHECKOUT)!;
     floor.unseated.push(

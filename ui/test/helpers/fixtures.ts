@@ -43,6 +43,7 @@ interface DeskSpec {
   activity?: DeskActivity;
   agents?: number;
   location?: 'local' | 'cloud';
+  account?: string;
 }
 interface CheckoutSpec {
   repo: string;
@@ -261,6 +262,7 @@ function occupantOf(f: FloorSpec, c: CheckoutSpec, d: DeskSpec): Occupant {
     internsMore: 0,
     runs: [],
     location: d.location ?? 'local',
+    account: d.account ?? null,
     pane: d.pane,
     focusable: focusable(d),
     robot: look && {
@@ -292,6 +294,7 @@ function summary(f: FloorSpec, number: number): FloorSummary {
     kind: f.kind,
     name: f.name,
     repos: [...new Set(f.checkouts.map((c) => c.repo))].sort(),
+    accounts: [...new Set(f.checkouts.flatMap((c) => c.desks.flatMap((d) => (d.account ? [d.account] : []))))].sort(),
     windows: podsOf(f).pods.flatMap((p) => p.desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state } : { sessionId: null, state: null }))),
     counts,
     shutters: desks.every((d) => d.state === 'dormant'),
@@ -300,7 +303,7 @@ function summary(f: FloorSpec, number: number): FloorSummary {
 }
 
 function entry(f: FloorSpec, c: CheckoutSpec, d: DeskSpec, state: 'needs_you' | 'done'): AttentionEntry {
-  return { sessionId: d.id, floorKey: f.key, name: d.name, repo: c.repo, state, since: d.since, reason: d.reason ?? null, title: d.title, focusable: focusable(d), summary: null };
+  return { sessionId: d.id, floorKey: f.key, name: d.name, repo: c.repo, account: d.account ?? null, state, since: d.since, reason: d.reason ?? null, title: d.title, focusable: focusable(d), summary: null };
 }
 
 export function makeScene(): BuildingScene {

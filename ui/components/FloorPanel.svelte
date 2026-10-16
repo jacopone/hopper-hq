@@ -99,7 +99,7 @@
             <button type="button" class="row-btn sw-{occupant.state}" onclick={() => onDesk(occupant.sessionId)}>
               <span class="dot" aria-hidden="true"></span>
               <span class="r-name">{occupant.name}</span>
-              <span class="r-state">{STATES[occupant.state].label}{seated ? '' : ' · no desk'}</span>
+              <span class="r-state">{STATES[occupant.state].label}{seated ? '' : ' · no desk'}{occupant.account ? ` · ${occupant.account}` : ''}</span>
               <span class="r-task">{occupant.title ?? 'No task yet'}</span>
               {#if occupant.summary}
                 <span class="r-sum" class:stale={occupant.summary.stale}>{occupant.summary.text} · {summaryAge(occupant.summary, now)}</span>

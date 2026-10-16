@@ -27,7 +27,7 @@ beforeEach(async () => {
 
 function adapter(overrides: Partial<FsAdapterOptions> = {}) {
   return new FsAdapter({
-    claudeDir: root,
+    claudeDirs: [{ dir: root, account: null }],
     emit: (e) => events.push(e),
     resolveWorkspace: async (cwd) => ({ cwd, repoRoot: cwd, repoName: 'orders-api', worktree: false, branch: 'feat/checkout-v2' }),
     probe: async (pids) => new Map(pids.map((p) => [p, T0 - 1000])),
@@ -59,6 +59,41 @@ describe('FsAdapter', () => {
     expect(events[0]).toMatchObject({ sessionId: 'S1', source: 'fs', pid: 4242, name: 'orders-api-a1', tmuxPane: '%7', tmuxSession: 'x', transcriptPath: path, startedAt: T0, workspace: { cwd: CWD } });
     expect(events[4]).toMatchObject({ label: 'Bash: npm test', cwd: CWD });
     expect(events[5]).toMatchObject({ status: 'busy', ts: T0 + 5000 });
+  });
+
+  it('watches several config directories, and signs each session with its directory\'s account', async () => {
+    await writeSession(SESSION);
+    await writeTranscript(encodeProjectDir(CWD), LINES);
+    const other = await mkdtemp(join(tmpdir(), 'shq-fs-b-'));
+    await mkdir(join(other, 'sessions'), { recursive: true });
+    await writeFile(join(other, 'sessions', '4343.json'), JSON.stringify({ ...SESSION, pid: 4343, sessionId: 'S2', cwd: '/w/shop/web', name: 'web-b2' }));
+    const dir = join(other, 'projects', encodeProjectDir('/w/shop/web'));
+    await mkdir(dir, { recursive: true });
+    await writeFile(join(dir, 'S2.jsonl'), JSON.stringify({ type: 'ai-title', aiTitle: 'Web task', sessionId: 'S2' }) + '\n');
+    const a = adapter({ claudeDirs: [{ dir: root, account: 'work@example.com' }, { dir: other, account: 'home' }] });
+    await a.poll();
+    const seen = events.filter((e) => e.type === 'session.seen');
+    expect(seen.map((e) => [e.sessionId, e.type === 'session.seen' && e.account])).toEqual([['S1', 'work@example.com'], ['S2', 'home']]);
+    // Each transcript is found in its own directory's projects.
+    expect(events.filter((e) => e.type === 'title').map((e) => e.sessionId)).toEqual(['S1', 'S2']);
+    // A session gone from one directory ends while the other's stays.
+    events.length = 0;
+    await rm(join(other, 'sessions', '4343.json'));
+    await a.poll();
+    expect(events.map((e) => [e.type, e.sessionId])).toEqual([['session.ended', 'S2']]);
+  });
+
+  it('ends nobody while a directory cannot be read', async () => {
+    await writeSession(SESSION);
+    const other = await mkdtemp(join(tmpdir(), 'shq-fs-c-'));
+    await mkdir(join(other, 'sessions'), { recursive: true });
+    await writeFile(join(other, 'sessions', '4343.json'), JSON.stringify({ ...SESSION, pid: 4343, sessionId: 'S2', cwd: '/w/shop/web' }));
+    const a = adapter({ claudeDirs: [{ dir: root, account: null }, { dir: other, account: null }] });
+    await a.poll();
+    events.length = 0;
+    await rm(join(other, 'sessions'), { recursive: true });
+    await a.poll();
+    expect(events.filter((e) => e.type === 'session.ended')).toEqual([]);
   });
 
   it('follows new lines and status changes without repeating old events', async () => {

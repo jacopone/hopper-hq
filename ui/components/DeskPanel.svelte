@@ -6,8 +6,8 @@
   import StatePill from './StatePill.svelte';
 
   /**
-   * One session: what it does, where it stands, what it waits for, where it runs; the two things to do from here; and
-   * its interns and workflow runs. A session without a desk says so, in words: the floor has no robot of it to show.
+   * One session: what it does, where it stands, what it waits for, where and under which account it runs; the two
+   * things to do from here; and its interns and workflow runs. A session without a desk says so, in words: the floor has no robot of it to show.
    */
   interface Props {
     /** The session: at a desk on the floor, or waiting for one. */
@@ -38,7 +38,7 @@
 
 <button type="button" class="linkbtn back" onclick={singleClick(onBack)}>← Floor {floor.number} · {floor.name}</button>
 <div>
-  <p class="eyebrow">{desk.checkout.repo} · {where}</p>
+  <p class="eyebrow">{desk.checkout.repo}{desk.account ? ` · ${desk.account}` : ''} · {where}</p>
   <div class="head-row">
     <h2 tabindex="-1" class="p-title mono">{desk.name}</h2>
     <StatePill state={desk.state} />
@@ -73,6 +73,10 @@
   {#if desk.agentsRunning > 0}
     <dt>Subagents</dt>
     <dd>{plural(desk.agentsRunning, 'running', 'running')}</dd>
+  {/if}
+  {#if desk.account}
+    <dt>Account</dt>
+    <dd>{desk.account}</dd>
   {/if}
   <dt>Repo</dt>
   <dd>{desk.checkout.repo}</dd>

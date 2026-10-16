@@ -4,6 +4,7 @@ exports[`the demo building > matches the snapshot 1`] = `
 {
   "floors": [
     {
+      "accounts": [],
       "core": {
         "h": 2,
         "w": 4,
@@ -38,6 +39,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p0-0",
               "occupant": {
+                "account": null,
                 "activity": null,
                 "agentsRunning": 1,
                 "at": {
@@ -93,6 +95,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p0-1",
               "occupant": {
+                "account": null,
                 "activity": null,
                 "agentsRunning": 0,
                 "at": {
@@ -135,6 +138,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "south",
               "id": "p0-2",
               "occupant": {
+                "account": null,
                 "activity": {
                   "label": "Edit src/checkout/AddressStep.tsx",
                   "running": true,
@@ -221,6 +225,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p1-0",
               "occupant": {
+                "account": null,
                 "activity": {
                   "label": "Bash: rm -rf dist && npm run build",
                   "running": false,
@@ -434,9 +439,10 @@ exports[`the demo building > matches the snapshot 1`] = `
       },
       "unseated": [],
       "unseatedMore": 0,
-      "version": 4,
+      "version": 5,
     },
     {
+      "accounts": [],
       "core": {
         "h": 2,
         "w": 4,
@@ -468,6 +474,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p0-0",
               "occupant": {
+                "account": null,
                 "activity": {
                   "label": "Bash: npm test",
                   "running": true,
@@ -642,9 +649,10 @@ exports[`the demo building > matches the snapshot 1`] = `
       },
       "unseated": [],
       "unseatedMore": 0,
-      "version": 4,
+      "version": 5,
     },
     {
+      "accounts": [],
       "core": {
         "h": 2,
         "w": 4,
@@ -677,6 +685,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p0-0",
               "occupant": {
+                "account": null,
                 "activity": {
                   "label": "Bash: npm run typecheck",
                   "running": true,
@@ -723,6 +732,7 @@ exports[`the demo building > matches the snapshot 1`] = `
               "chair": "north",
               "id": "p0-1",
               "occupant": {
+                "account": null,
                 "activity": null,
                 "agentsRunning": 0,
                 "at": {
@@ -887,13 +897,14 @@ exports[`the demo building > matches the snapshot 1`] = `
       },
       "unseated": [],
       "unseatedMore": 0,
-      "version": 4,
+      "version": 5,
     },
   ],
   "scene": {
     "attention": {
       "done": [
         {
+          "account": null,
           "floorKey": "feature:checkout-v2",
           "focusable": true,
           "name": "storefront-web-b2",
@@ -908,6 +919,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       ],
       "needsYou": [
         {
+          "account": null,
           "floorKey": "feature:checkout-v2",
           "focusable": true,
           "name": "orders-api-c3",
@@ -925,6 +937,7 @@ exports[`the demo building > matches the snapshot 1`] = `
           "title": "Add idempotency keys to POST /orders",
         },
         {
+          "account": null,
           "floorKey": "repo:/demo/orders-api",
           "focusable": true,
           "name": "orders-api-g7",
@@ -945,6 +958,7 @@ exports[`the demo building > matches the snapshot 1`] = `
     },
     "floors": [
       {
+        "accounts": [],
         "counts": {
           "done": 1,
           "in_meeting": 1,
@@ -998,6 +1012,7 @@ exports[`the demo building > matches the snapshot 1`] = `
         ],
       },
       {
+        "accounts": [],
         "counts": {
           "working": 1,
         },
@@ -1046,6 +1061,7 @@ exports[`the demo building > matches the snapshot 1`] = `
         ],
       },
       {
+        "accounts": [],
         "counts": {
           "needs_you": 1,
           "working": 1,
@@ -1095,7 +1111,7 @@ exports[`the demo building > matches the snapshot 1`] = `
         ],
       },
     ],
-    "version": 4,
+    "version": 5,
   },
 }
 `;

@@ -1,13 +1,59 @@
 import { describe, expect, it } from 'vitest';
 import { homedir } from 'node:os';
-import { join } from 'node:path';
-import { DEFAULT_PORT, DEFAULT_THRESHOLDS, resolvePaths } from '../src/config.js';
+import { delimiter, join } from 'node:path';
+import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolvePaths } from '../src/config.js';
+
+describe('parseClaudeDir', () => {
+  it('reads a directory, and a label after the last "="', () => {
+    expect(parseClaudeDir('/a')).toEqual({ dir: '/a', label: null });
+    expect(parseClaudeDir('/a=work')).toEqual({ dir: '/a', label: 'work' });
+    expect(parseClaudeDir('/opt/x=1/claude=me@example.com')).toEqual({ dir: '/opt/x=1/claude', label: 'me@example.com' });
+  });
+
+  it('drops an empty label and keeps the directory', () => {
+    expect(parseClaudeDir('/a=')).toEqual({ dir: '/a', label: null });
+  });
+
+  it('refuses an empty directory', () => {
+    expect(() => parseClaudeDir('')).toThrow();
+    expect(() => parseClaudeDir('=label')).toThrow();
+  });
+});
 
 describe('resolvePaths', () => {
+  const home = join(homedir(), '.claude');
+
   it('prefers explicit options, then environment, then home defaults', () => {
-    expect(resolvePaths({ claudeDir: '/a', dataDir: '/b' }, { CLAUDE_CONFIG_DIR: '/x', HOPPER_HQ_HOME: '/y' })).toEqual({ claudeDir: '/a', dataDir: '/b' });
-    expect(resolvePaths({}, { CLAUDE_CONFIG_DIR: '/x', HOPPER_HQ_HOME: '/y' })).toEqual({ claudeDir: '/x', dataDir: '/y' });
-    expect(resolvePaths({}, {})).toEqual({ claudeDir: join(homedir(), '.claude'), dataDir: join(homedir(), '.hopper-hq') });
+    expect(resolvePaths({ claudeDirs: ['/a'], dataDir: '/b' }, { CLAUDE_CONFIG_DIR: '/x', HOPPER_HQ_HOME: '/y' })).toEqual({ claudeDirs: [{ dir: '/a', label: null }], dataDir: '/b' });
+    expect(resolvePaths({}, { CLAUDE_CONFIG_DIR: '/x', HOPPER_HQ_HOME: '/y' })).toEqual({ claudeDirs: [{ dir: '/x', label: null }], dataDir: '/y' });
+    expect(resolvePaths({}, {})).toEqual({ claudeDirs: [{ dir: home, label: null }], dataDir: join(homedir(), '.hopper-hq') });
+  });
+
+  it('takes one directory as a shorthand', () => {
+    expect(resolvePaths({ claudeDir: '/a' }, {}).claudeDirs).toEqual([{ dir: '/a', label: null }]);
+  });
+
+  it('takes several directories, each with its label, from the options or HOPPER_HQ_CLAUDE_DIRS', () => {
+    expect(resolvePaths({ claudeDirs: ['/a=work', '/b'] }, { CLAUDE_CONFIG_DIR: '/x' }).claudeDirs).toEqual([
+      { dir: '/a', label: 'work' },
+      { dir: '/b', label: null },
+    ]);
+    expect(resolvePaths({}, { HOPPER_HQ_CLAUDE_DIRS: ['/a=work', '/b=home'].join(delimiter), CLAUDE_CONFIG_DIR: '/x' }).claudeDirs).toEqual([
+      { dir: '/a', label: 'work' },
+      { dir: '/b', label: 'home' },
+    ]);
+  });
+
+  it('keeps each directory once, the first spelling of its label winning', () => {
+    expect(resolvePaths({ claudeDirs: ['/a=work', '/b', '/a=other', '/b=home'] }, {}).claudeDirs).toEqual([
+      { dir: '/a', label: 'work' },
+      { dir: '/b', label: 'home' },
+    ]);
+  });
+
+  it('ignores an empty list and empty entries', () => {
+    expect(resolvePaths({ claudeDirs: [] }, {}).claudeDirs).toEqual([{ dir: home, label: null }]);
+    expect(resolvePaths({}, { HOPPER_HQ_CLAUDE_DIRS: `${delimiter}/a${delimiter}` }).claudeDirs).toEqual([{ dir: '/a', label: null }]);
   });
 });
 

@@ -42,6 +42,7 @@
               <button type="button" class="open" title={what(entry)} onclick={() => onOpen(entry)}>
                 <span class="dot" aria-hidden="true"></span>
                 <span class="who">{entry.name}</span>
+                {#if entry.account}<span class="acct">{entry.account}</span>{/if}
                 <span class="what">{what(entry)}</span>
                 <span class="time">{formatAgo(now - entry.since)}</span>
                 {#if entry.summary}
@@ -110,6 +111,7 @@
   .needs .dot { background: var(--s-needs); box-shadow: 0 0 0 3px color-mix(in oklab, var(--s-needs) 22%, transparent); }
   .done .dot { background: var(--s-done); }
   .who { font-weight: 600; white-space: nowrap; font-family: var(--font-mono); font-size: 12.5px; }
+  .acct { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 22ch; min-width: 0; font-size: 12px; }
   .what { color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 36ch; min-width: 0; }
   .time { font-family: var(--font-mono); font-size: 12px; color: var(--muted); }
   /*

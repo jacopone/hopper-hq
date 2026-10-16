@@ -5,7 +5,7 @@
  */
 import type { RunStatus, SessionState, WaitKind } from '../core/types.js';
 
-export const SCENE_VERSION = 4;
+export const SCENE_VERSION = 5;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -34,6 +34,8 @@ export interface FloorSummary {
   name: string;
   /** Repo labels on the floor, sorted. */
   repos: string[];
+  /** The accounts of the floor's sessions, sorted; empty when the sessions carry none. */
+  accounts: string[];
   /** One per desk of the plan, in desk index order. A floor's sessions are counted by `counts`, which include unseated ones. */
   windows: FacadeWindow[];
   counts: Partial<Record<ShownState, number>>;
@@ -49,6 +51,8 @@ export interface AttentionEntry {
   /** Session name, or '<repo>-<first 4 chars of id>'. */
   name: string;
   repo: string;
+  /** The account the session runs under; null when the sessions carry none. */
+  account: string | null;
   state: 'needs_you' | 'done';
   since: number;
   reason: SceneReason | null;
@@ -187,6 +191,8 @@ export interface Occupant {
   /** Running runs first (by start), then finished ones, latest ended first; at most RUNS_SHOWN. */
   runs: RunSummary[];
   location: 'local' | 'cloud';
+  /** The account the session runs under (an email, or the label of its config directory); null when the sessions carry none. */
+  account: string | null;
   /** tmux pane id (%N) for display; focus goes through POST /api/focus by sessionId. */
   pane: string | null;
   focusable: boolean;

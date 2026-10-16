@@ -39,6 +39,12 @@ describe('BuildingPanel', () => {
     expect(text(panel(floors).rows()[0]!.querySelector('.fl-counts'))).toBe('◉2 need you');
   });
 
+  it('lists the accounts on a floor after its sessions, when its sessions carry any', () => {
+    const floors = makeScene().floors;
+    floors[0]!.accounts = ['home', 'work@example.com'];
+    expect(text(panel(floors).rows()[0]!.querySelector('.fl-meta'))).toBe('orders-api, payments-svc, storefront-web · 4 sessions · home, work@example.com');
+  });
+
   it('explains the windows in words, not by colour alone', () => {
     const { target } = panel();
     expect(text(target.querySelector('.p-text'))).toBe(

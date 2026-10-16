@@ -51,6 +51,13 @@ describe('AttentionBar', () => {
     expect(chips(1).map((c) => text(c.querySelector('.who')))).toEqual(['orders-api-i9', 'storefront-web-b2']);
   });
 
+  it('names the account of an entry that carries one, after its name', () => {
+    const attention = makeScene().attention;
+    attention.needsYou[0]!.account = 'work@example.com';
+    const { chips } = bar(attention);
+    expect(chips(0).map((c) => text(c.querySelector('.acct')))).toEqual(['work@example.com', '']);
+  });
+
   it('says what each waits for, who raised it, and for how long', () => {
     const { chips } = bar();
     expect(chips(0).map((c) => text(c.querySelector('.what')))).toEqual([

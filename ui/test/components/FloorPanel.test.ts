@@ -67,6 +67,14 @@ describe('FloorPanel', () => {
     expect(onDesk).toHaveBeenCalledWith('sw-b2');
   });
 
+  it('adds the account to a row whose session carries one', () => {
+    const floor = makeFloor(CHECKOUT)!;
+    const desk = occupantsOf(floor).find((o) => o.sessionId === 'sw-a1')!;
+    desk.account = 'work@example.com';
+    const { groups, rows } = panel(CHECKOUT, floor);
+    expect(rows(groups()[2]!)[0]).toBe('storefront-web-a1 | Working · work@example.com | Build the address step of the new checkout');
+  });
+
   it('keeps a checkout that spans two pods in one group, in desk order, and two checkouts that share a pod apart', () => {
     const department = panel(ORDERS);
     expect(department.groups()).toHaveLength(1);

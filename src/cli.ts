@@ -5,7 +5,7 @@ import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 import type { AttentionSummary, Snapshot } from './collector.js';
-import { resolvePaths } from './config.js';
+import { parseClaudeDir, resolvePaths } from './config.js';
 import { readDaemonFile } from './daemon-file.js';
 import { dataDirInUse, DataDirInUseError } from './daemon-lock.js';
 import { cleanText, formatAgo } from './scene/text.js';
@@ -105,8 +105,8 @@ const stdio: Io = {
 export const HELP = `hopper-hq: watch your coding-agent sessions work
 
 Usage:
-  hopper-hq up [--port N] [--no-open] [--claude-dir DIR] [--data-dir DIR]
-  hopper-hq start [--port N] [--claude-dir DIR] [--data-dir DIR] [--no-watch]
+  hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--data-dir DIR]
+  hopper-hq start [--port N] [--claude-dir DIR[=LABEL]]... [--data-dir DIR] [--no-watch]
   hopper-hq down [--data-dir DIR]
   hopper-hq status [--format text|tmux|json] [--data-dir DIR]
   hopper-hq ls [--data-dir DIR]
@@ -198,7 +198,7 @@ function portOption(value: string | undefined): number | undefined {
 async function cmdUp(args: string[], io: Io): Promise<number> {
   const { values } = parseArgs({
     args,
-    options: { port: { type: 'string' }, 'no-open': { type: 'boolean', default: false }, 'claude-dir': { type: 'string' }, ...dataDirOption },
+    options: { port: { type: 'string' }, 'no-open': { type: 'boolean', default: false }, 'claude-dir': { type: 'string', multiple: true }, ...dataDirOption },
   });
   const port = portOption(values.port);
   const dataDir = resolve(resolvePaths({ dataDir: values['data-dir'] }).dataDir);
@@ -214,7 +214,11 @@ async function cmdUp(args: string[], io: Io): Promise<number> {
   const from = (await stat(log).catch(() => null))?.size ?? 0;
   const startArgs = ['--data-dir', dataDir];
   if (port !== undefined) startArgs.push('--port', String(port));
-  if (values['claude-dir'] !== undefined) startArgs.push('--claude-dir', resolve(values['claude-dir']));
+  for (const spec of values['claude-dir'] ?? []) {
+    // The directory is made absolute for the daemon, which runs from the data directory; its label stays as given.
+    const { dir, label } = parseClaudeDir(spec);
+    startArgs.push('--claude-dir', label === null ? resolve(dir) : `${resolve(dir)}=${label}`);
+  }
   const daemon = await (io.spawnDaemon ?? spawnDetached)(startArgs, log);
   let ended = false;
   void daemon.exited.then(() => (ended = true));
@@ -260,13 +264,13 @@ async function logSince(log: string, from: number): Promise<string[]> {
 async function cmdStart(args: string[], io: Io): Promise<number> {
   const { values } = parseArgs({
     args,
-    options: { port: { type: 'string' }, 'claude-dir': { type: 'string' }, ...dataDirOption, 'no-watch': { type: 'boolean', default: false } },
+    options: { port: { type: 'string' }, 'claude-dir': { type: 'string', multiple: true }, ...dataDirOption, 'no-watch': { type: 'boolean', default: false } },
   });
   const port = portOption(values.port);
   const { startDaemon } = await import('./daemon.js');
   let daemon;
   try {
-    daemon = await startDaemon({ port, claudeDir: values['claude-dir'], dataDir: values['data-dir'], watchFiles: !values['no-watch'], log: io.err });
+    daemon = await startDaemon({ port, claudeDirs: values['claude-dir'], dataDir: values['data-dir'], watchFiles: !values['no-watch'], log: io.err });
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code === 'EADDRINUSE') {
       io.err(`Port ${port ?? 7337} is already in use. Is hopper-hq already running? Check with: hopper-hq status`);
