@@ -116,7 +116,7 @@ hopper-hq watches Claude Code's config directory, `~/.claude` or `$CLAUDE_CONFIG
 hopper-hq up --claude-dir ~/.claude=me@work.example --claude-dir ~/.claude-home=me@home.example
 ```
 
-Every session then carries its account: on its desk, in its row on the floor, in the directory of the building and in the bar at the top. A directory without a label is named after the account signed into it (from its `.claude.json`), else after the directory. With one directory and no label, nothing is shown. `HOPPER_HQ_CLAUDE_DIRS` names the same list for a daemon started by a service, one entry per path separator (`:` on macOS and Linux).
+Every session then carries its account: on its desk, in its row on the floor, in the directory of the building and in the bar at the top. A directory without a label is named after the account signed into it (from its `.claude.json` or `.config.json`, and for `~/.claude` from `~/.claude.json`), else after the directory. With one directory and no label, nothing is shown. `HOPPER_HQ_CLAUDE_DIRS` names the same list for a daemon started by a service, one entry per path separator (`:` on macOS and Linux).
 
 ## The building
 

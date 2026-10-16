@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mkdtemp, writeFile } from 'node:fs/promises';
+import { mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { accountLabels, readAccountEmail } from '../../src/adapters/claude-code/account.js';
@@ -20,6 +20,19 @@ describe('readAccountEmail', () => {
     expect(await readAccountEmail(dir)).toBeNull();
     await writeFile(join(dir, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 7 } }));
     expect(await readAccountEmail(dir)).toBeNull();
+  });
+});
+
+describe('readAccountEmail, where Claude Code keeps the account', () => {
+  it('reads .config.json when .claude.json says nothing, and the home .claude.json for the default directory', async () => {
+    const dir = await tmp();
+    await writeFile(join(dir, '.claude.json'), '');
+    await writeFile(join(dir, '.config.json'), JSON.stringify({ oauthAccount: { emailAddress: 'cfg@example.com' } }));
+    expect(await readAccountEmail(dir)).toBe('cfg@example.com');
+    const home = await tmp();
+    await mkdir(join(home, '.claude'));
+    await writeFile(join(home, '.claude.json'), JSON.stringify({ oauthAccount: { emailAddress: 'home@example.com' } }));
+    expect(await readAccountEmail(join(home, '.claude'))).toBe('home@example.com');
   });
 });
 

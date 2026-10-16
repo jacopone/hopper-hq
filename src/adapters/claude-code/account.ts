@@ -1,17 +1,31 @@
 import { readFile } from 'node:fs/promises';
-import { basename } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import type { ClaudeDir } from '../../config.js';
 
-/** The account Claude Code signed into in a config directory, from its .claude.json; null when the file does not say. */
-export async function readAccountEmail(dir: string): Promise<string | null> {
+async function emailIn(file: string): Promise<string | null> {
   try {
-    const parsed: unknown = JSON.parse(await readFile(`${dir}/.claude.json`, 'utf8'));
+    const parsed: unknown = JSON.parse(await readFile(file, 'utf8'));
     const account = (parsed as { oauthAccount?: { emailAddress?: unknown } } | null)?.oauthAccount;
     const email = account?.emailAddress;
     return typeof email === 'string' && email.trim() ? email.trim() : null;
   } catch {
     return null;
   }
+}
+
+/**
+ * The account Claude Code signed into in a config directory; null when no file says. Claude Code keeps it in the
+ * directory's .claude.json, or in its .config.json (a directory provisioned by CLAUDE_CONFIG_DIR), and for the default
+ * directory ~/.claude in ~/.claude.json beside it.
+ */
+export async function readAccountEmail(dir: string): Promise<string | null> {
+  const files = [`${dir}/.claude.json`, `${dir}/.config.json`];
+  if (basename(dir) === '.claude') files.push(join(dirname(dir), '.claude.json'));
+  for (const f of files) {
+    const email = await emailIn(f);
+    if (email) return email;
+  }
+  return null;
 }
 
 /**
