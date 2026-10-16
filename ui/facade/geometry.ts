@@ -145,7 +145,8 @@ function labelAt(b: Bounds, anchor: Point, labelX: number, hasMeta: boolean): La
 }
 
 /** The whole building for the scene's floors, listed top to bottom as the scene lists them. */
-export function facadeOf(floors: readonly FloorSummary[]): FacadeModel {
+/** `lobbyMeta`: the Lobby's label carries a meta line (a gatekeeper's counts), so its name moves up as a floor's does. */
+export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): FacadeModel {
   const b = new Bounds();
   const W = Math.max(MIN_WIDTH, ...floors.map((f) => f.windows.length));
   const D = DEPTH;
@@ -165,7 +166,7 @@ export function facadeOf(floors: readonly FloorSummary[]): FacadeModel {
     windows: lobbyWindows,
     doors,
     side: points(onSide(W, 0.3, D - 0.3, 14, LOBBY_H - 10)),
-    label: labelAt(b, project(W, 0, LOBBY_H / 2), labelX, false),
+    label: labelAt(b, project(W, 0, LOBBY_H / 2), labelX, lobbyMeta),
   };
 
   const stacked: FacadeFloor[] = [];

@@ -53,6 +53,15 @@ describe('façade geometry', () => {
     expect(m.lobby.label.circle[1]).toBeGreaterThan(m.floors[0]!.label.circle[1]);
   });
 
+  it('lifts the Lobby\'s name when its label carries a meta line, as a floor\'s does', () => {
+    const floors = makeScene().floors;
+    const plain = facadeOf(floors).lobby.label;
+    const withMeta = facadeOf(floors, true).lobby.label;
+    expect(withMeta.circle).toEqual(plain.circle);
+    expect(withMeta.nameAt[1]).toBeLessThan(plain.nameAt[1]);
+    expect(withMeta.metaAt[1]).toBeGreaterThan(withMeta.nameAt[1]);
+  });
+
   it('gives each desk of a floor\'s plan a window, in desk order, dark where it is free, and leaves the row past its plan to the wall', () => {
     const m = facadeOf(makeScene().floors);
     expect(m.width).toBe(16);

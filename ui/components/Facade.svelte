@@ -30,7 +30,7 @@
     onLobby();
   }
 
-  const model = $derived(facadeOf(floors));
+  const model = $derived(facadeOf(floors, lobby !== null && lobbyMeta(lobby).length > 0));
   const byKey = $derived(new Map(floors.map((f) => [f.key, f])));
 
   function pick(e: MouseEvent, key: string): void {
