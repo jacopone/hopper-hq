@@ -31,6 +31,17 @@ export function resolveTerminal(value: string | undefined, env: NodeJS.ProcessEn
   return word as TerminalChoice;
 }
 
+export type GatekeeperChoice = { kind: 'none' } | { kind: 'gordon'; dir: string | null };
+
+/** The gatekeeper named by an option or HOPPER_HQ_GATEKEEPER ('none', 'gordon', 'gordon=DIR'); none when neither says. */
+export function resolveGatekeeper(value: string | undefined, env: NodeJS.ProcessEnv = process.env): GatekeeperChoice {
+  const word = value ?? env.HOPPER_HQ_GATEKEEPER ?? 'none';
+  if (word === 'none') return { kind: 'none' };
+  const m = /^gordon(?:=(.+))?$/.exec(word);
+  if (!m) throw new Error(`Unknown gatekeeper: ${word} (none, gordon or gordon=DIR)`);
+  return { kind: 'gordon', dir: m[1] ?? null };
+}
+
 export interface PathOptions {
   /** One config directory: shorthand for `claudeDirs: [dir]`. */
   claudeDir?: string;

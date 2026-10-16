@@ -6,12 +6,13 @@ import { join, resolve, sep } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { accountLabels } from './adapters/claude-code/account.js';
 import { FsAdapter } from './adapters/claude-code/fs-adapter.js';
+import { DEFAULT_GORDON_DIR, GordonProvider } from './adapters/gatekeepers/gordon.js';
 import { HerdrAdapter, probeHerdr } from './adapters/herdr.js';
 import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
 import { callDaemon } from './client.js';
 import { Collector } from './collector.js';
-import { DEFAULT_PORT, resolveFloorMode, resolvePaths, resolveTerminal, type Paths } from './config.js';
+import { DEFAULT_PORT, resolveFloorMode, resolveGatekeeper, resolvePaths, resolveTerminal, type GatekeeperChoice, type Paths } from './config.js';
 import { rulesFor, type FloorMode } from './core/feature.js';
 import type { TerminalChoice, TerminalKind } from './core/terminal.js';
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from './daemon-file.js';
@@ -37,6 +38,8 @@ export interface DaemonOptions {
   floors?: FloorMode;
   /** The terminal Go switches: tmux, herdr, or auto (default), which takes herdr when it answers. */
   terminal?: TerminalChoice;
+  /** The orchestrator whose Lobby the building shows (default none). */
+  gatekeeper?: GatekeeperChoice;
   /** Watch the config directories on disk (default true). The mod works either way. */
   watchFiles?: boolean;
   log?: (line: string) => void;
@@ -159,7 +162,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   const collector = new Collector({
     resolveWorkspace,
     store,
-    acceptSources: opts.demo ? ['demo'] : ['hook', 'fs', 'terminal'],
+    acceptSources: opts.demo ? ['demo'] : ['hook', 'fs', 'terminal', 'gatekeeper'],
     log,
     ignoreCwd,
     holdRestored: watchFiles,
@@ -227,10 +230,18 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   // Under herdr the session files name no pane: the terminal's own listing does.
   const herdr = watchFiles && terminal === 'herdr' ? new HerdrAdapter({ emit: (e) => void collector.ingest(e), onReachable: (v) => collector.setTerminalReachable(v) }) : null;
   herdr?.start();
+  // The gatekeeper's files name the Lobby, and each session's task by its pane.
+  const gate = opts.gatekeeper ?? resolveGatekeeper(undefined);
+  const gatekeeper = opts.demo || gate.kind === 'none' ? null : new GordonProvider({ dir: gate.dir ?? DEFAULT_GORDON_DIR, panes: () => collector.localPanes(), log });
+  gatekeeper?.start({
+    lobby: (l) => collector.setLobby(l),
+    task: (sessionId, task) => void collector.ingest({ type: 'task', sessionId, ts: Date.now(), source: 'gatekeeper', task }),
+  });
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
   if (floors !== 'feature') log(`hopper-hq gives each repository a floor (--floors ${floors})`);
   if (!opts.demo) log(`hopper-hq switches panes with ${terminal}${choice === 'auto' ? ' (--terminal auto)' : ''}`);
+  if (gatekeeper && gate.kind !== 'none') log(`hopper-hq shows the Lobby of ${gate.kind} (${gate.dir ?? DEFAULT_GORDON_DIR})`);
   if (labels && paths.claudeDirs.length > 1) log(`hopper-hq watches ${paths.claudeDirs.length} config directories: ${paths.claudeDirs.map((d) => `${d.dir} (${labels.get(d.dir)})`).join(', ')}`);
 
   return {
@@ -243,6 +254,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
       summarizer.stop();
       fsAdapter?.stop();
       herdr?.stop();
+      gatekeeper?.stop();
       demo?.stop();
       hub.close();
       server.closeAllConnections();

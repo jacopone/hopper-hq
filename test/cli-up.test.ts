@@ -72,8 +72,8 @@ describe('up', () => {
     try {
       const first = capture();
       // Each config directory is passed on, made absolute, with its label as given.
-      expect(await main(['up', '--port', '0', '--data-dir', dataDir, '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`, '--floors', 'repo', '--terminal', 'herdr'], { ...first.io, open, spawnDaemon: bg.spawnDaemon })).toBe(0);
-      expect(bg.calls).toEqual([{ args: ['--data-dir', dataDir, '--port', '0', '--floors', 'repo', '--terminal', 'herdr', '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`], log }]);
+      expect(await main(['up', '--port', '0', '--data-dir', dataDir, '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`, '--floors', 'repo', '--terminal', 'herdr', '--gatekeeper', 'gordon=/srv/g'], { ...first.io, open, spawnDaemon: bg.spawnDaemon })).toBe(0);
+      expect(bg.calls).toEqual([{ args: ['--data-dir', dataDir, '--port', '0', '--floors', 'repo', '--terminal', 'herdr', '--gatekeeper', 'gordon=/srv/g', '--claude-dir', claudeDir, '--claude-dir', `${claudeDir}-b=home`], log }]);
       expect(first.err).toEqual([
         `Started hopper-hq in the background. Its log is ${log}`,
         `Stop it with: hopper-hq down --data-dir ${dataDir}`,
@@ -201,7 +201,7 @@ describe('up', () => {
     }
     const h = capture();
     await main(['--help'], h.io);
-    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo] [--terminal auto|tmux|herdr] [--data-dir DIR]');
+    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR]');
   });
 });
 

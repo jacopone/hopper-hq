@@ -8,6 +8,7 @@ import { encodeProjectDir } from '../src/adapters/claude-code/fs-adapter.js';
 import { demoSummaryLine } from '../src/adapters/demo.js';
 import { newSession } from '../src/core/reducer.js';
 import type { RawEvent, Session, WorkflowRun } from '../src/core/types.js';
+import { callDaemon } from '../src/client.js';
 import { readDaemonFile } from '../src/daemon-file.js';
 import { startDaemon } from '../src/daemon.js';
 import { CSP } from '../src/server/headers.js';
@@ -495,6 +496,22 @@ describe('startDaemon and seating', () => {
       expect(b.collector.seatingOf(key)).toBe(restored);
     } finally {
       await b.stop();
+    }
+  });
+  it('serves the Lobby when a gatekeeper is configured, reading its directory', async () => {
+    const gordon = await tmp('shq-gordon-');
+    await writeFile(join(gordon, 'limits.json'), '{"sessions_max": 3}');
+    const d = await startDaemon({ port: 0, dataDir: await tmp('shq-data-'), claudeDir: await tmp('shq-claude-'), watchFiles: false, log: quiet, gatekeeper: { kind: 'gordon', dir: gordon } });
+    try {
+      const deadline = Date.now() + 3000;
+      let lobby: { cap?: { max?: number } } | null = null;
+      while (Date.now() < deadline && lobby?.cap?.max !== 3) {
+        lobby = (await callDaemon<{ cap?: { max?: number } }>(d.dataDir, 'GET', '/api/lobby', 500))?.data ?? null;
+        await new Promise((r) => setTimeout(r, 50));
+      }
+      expect(lobby?.cap?.max).toBe(3);
+    } finally {
+      await d.stop();
     }
   });
 });

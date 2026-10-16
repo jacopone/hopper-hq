@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolveFloorMode, resolvePaths } from '../src/config.js';
+import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolveFloorMode, resolveGatekeeper, resolvePaths } from '../src/config.js';
 
 describe('parseClaudeDir', () => {
   it('reads a directory, and a label after the last "="', () => {
@@ -63,6 +63,17 @@ describe('resolveFloorMode', () => {
     expect(resolveFloorMode(undefined, { HOPPER_HQ_FLOORS: 'repo' })).toBe('repo');
     expect(resolveFloorMode(undefined, {})).toBe('feature');
     expect(() => resolveFloorMode('branch', {})).toThrow(/Unknown floor mode: branch/);
+  });
+});
+
+describe('resolveGatekeeper', () => {
+  it('takes the option, else HOPPER_HQ_GATEKEEPER, else none; gordon with an optional directory', () => {
+    expect(resolveGatekeeper(undefined, {})).toEqual({ kind: 'none' });
+    expect(resolveGatekeeper('none', { HOPPER_HQ_GATEKEEPER: 'gordon' })).toEqual({ kind: 'none' });
+    expect(resolveGatekeeper(undefined, { HOPPER_HQ_GATEKEEPER: 'gordon' })).toEqual({ kind: 'gordon', dir: null });
+    expect(resolveGatekeeper('gordon=/srv/gordon', {})).toEqual({ kind: 'gordon', dir: '/srv/gordon' });
+    expect(() => resolveGatekeeper('alfred', {})).toThrow(/Unknown gatekeeper: alfred/);
+    expect(() => resolveGatekeeper('gordon=', {})).toThrow(/Unknown gatekeeper/);
   });
 });
 
