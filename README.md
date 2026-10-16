@@ -221,6 +221,12 @@ set -g status-interval 5
 
 `--terminal auto`, the default, takes herdr when `herdr pane list` answers as the daemon starts, and tmux otherwise. `--terminal tmux` or `--terminal herdr` decides; `HOPPER_HQ_TERMINAL` says the same for a daemon started by a service.
 
+## The Lobby
+
+On a machine that several accounts and an orchestrator share, the ground floor shows what happens outside the building: the orchestrator's gate and the launches it keeps waiting, each with its reason; one elevator per account with its five-hour and seven-day allowances, and the turn to take when the one in use is full; the sessions' memory against their cap, with the watchdog's mark and the sessions it paused. Every desk also names its task id.
+
+It needs a gatekeeper: a provider that reads what the orchestrator writes. `--gatekeeper gordon[=DIR]` reads Gordon's state directory (default `~/.local/state/alfred/gordon`); `HOPPER_HQ_GATEKEEPER` says the same for a service. The provider reads files only, never runs anything, and a file it cannot read empties its section. Without a gatekeeper the Lobby stays decor. The design is in [docs/plans/2026-10-16-lobby-design.md](docs/plans/2026-10-16-lobby-design.md).
+
 ## The Claude Code mod (recommended)
 
 The mod reports each session as things happen, with the exact reason a session waits. It also shows, above the prompt of every session, who else is waiting for you. A `Go` button jumps to that tmux pane.
@@ -308,7 +314,7 @@ Each summary is one call to the model, a small one by default. A session gets at
 | --- | --- |
 | `hopper-hq up` | Starts the daemon in the background unless it is running, then opens the building like `ui`. Use `--no-open` to print the link only. |
 | `hopper-hq down` | Stops the daemon. |
-| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository); `--terminal auto|tmux|herdr` picks the [terminal](#herdr) Go switches. |
+| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository); `--terminal auto|tmux|herdr` picks the [terminal](#herdr) Go switches; `--gatekeeper gordon` shows [the Lobby](#the-lobby). |
 | `hopper-hq status` | Prints a summary. Use `--format text`, `tmux` or `json`. |
 | `hopper-hq ls` | Lists floors and their sessions. |
 | `hopper-hq ack` | Marks finished sessions as seen. |
