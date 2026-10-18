@@ -79,19 +79,19 @@ describe('parseLobbyFile', () => {
     expect(l.queue.map((w) => [w.id, w.kind])).toEqual([['G-1', 'refused'], ['G-3', 'ready'], ['G-2', 'ready'], ['G-4', 'refused'], ['G-5', 'refused']]);
   });
 
-  it("reads the machine as the doorman measured it, and the capacity plan line; what is not a number is null", () => {
+  it("reads the machine as the doorman measured it, and the capacity plan line; what is not a number, or a count of zero, is null", () => {
     const l = parseLobbyFile(JSON.stringify({
       updated_at: '2026-10-18T15:27:10+02:00',
       machine: { mem_gb: 34, mem_total_gb: 62, slice_pct: 23, load: 1, threads: 24, disk_busy_pct: 0, psi_mem_pct: 0, rebuild: false, cpu_mhz: 1713, nproc: 24 },
       capacity: { sessions_max: 7, working: 1, slots_free: 6, plan: 'tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)' },
     }))!;
     expect(l.machine).toEqual({
-      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1713, nproc: 24,
+      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1713, cpuBraking: null, nproc: 24,
     });
     expect(l.plan).toBe('tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)');
-    const odd = parseLobbyFile(JSON.stringify({ machine: { mem_gb: '34', slice_pct: -1, load: null, threads: 24.5, rebuild: 'no' }, capacity: { plan: 7 } }))!;
+    const odd = parseLobbyFile(JSON.stringify({ machine: { mem_gb: '34', mem_total_gb: 0, slice_pct: -1, load: null, threads: 0, nproc: 0, rebuild: 'no' }, capacity: { plan: 7 } }))!;
     expect(odd.machine).toEqual({
-      memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: 24.5, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, nproc: null,
+      memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, cpuBraking: null, nproc: null,
     });
     expect(odd.plan).toBeNull();
     for (const bad of [{ machine: [] }, { machine: 'x' }, { machine: null }, {}]) expect(parseLobbyFile(JSON.stringify(bad))!.machine).toBeNull();
@@ -102,16 +102,16 @@ describe('readCpu', () => {
   it('reads the load, the mean MHz and the processors from a /proc directory', async () => {
     const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
     await writeFile(join(proc, 'loadavg'), '1.27 0.98 0.80 3/1893 3262771\n');
-    await writeFile(join(proc, 'cpuinfo'), ['processor\t: 0', 'cpu MHz\t\t: 600.000', '', 'processor\t: 1', 'cpu MHz\t\t: 1800.500', ''].join('\n'));
-    expect(await readCpu(proc)).toEqual({ load: 1.27, mhz: 1200, nproc: 2 });
+    await writeFile(join(proc, 'cpuinfo'), ['processor\t: 0', 'cpu MHz\t\t: 600.000', '', 'processor\t: 1', 'cpu MHz\t\t: 1800.000', ''].join('\n'));
+    expect(await readCpu(proc)).toEqual({ load: 1.27, mhz: 1200, mhzMax: 1800, nproc: 2 });
   });
 
   it('gives null for what it cannot read', async () => {
     const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
-    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, nproc: null });
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, mhzMax: null, nproc: null });
     await writeFile(join(proc, 'loadavg'), 'busy\n');
     await writeFile(join(proc, 'cpuinfo'), 'model name\t: x\n');
-    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, nproc: null });
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, mhzMax: null, nproc: null });
   });
 });
 

@@ -157,23 +157,51 @@ describe('GordonProvider', () => {
   it("reads the machine as the gate measured it and the CPU live, and rounds the CPU so that noise is not news", async () => {
     const s = await state();
     const out = sink();
-    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => NOW });
+    let now = NOW;
+    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => now });
     p.start(out.sink, 60_000);
     await p.poll();
-    // The gate's figures stay; load, frequency and processors come from /proc now (1.27 → 1.5, 1713 MHz → 1700, 2 cores), not from the file's 1, 900 and 24.
+    // The gate's figures stay; load, frequency and processors come from /proc now (1.27 → 1.0, as the gate floors it; 1713 MHz → 1700; 2 cores), not from the file's 1, 900 and 24.
     expect(out.lobbies[0]!.machine).toEqual({
-      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1.5, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, nproc: 2,
+      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, cpuBraking: false, nproc: 2,
     });
     // Load and frequency that move inside their rounding step change nothing.
     await writeFile(join(s.procDir, 'loadavg'), '1.41 1.00 0.81 3/1893 3262772\n');
     await writeFile(join(s.procDir, 'cpuinfo'), 'processor\t: 0\ncpu MHz\t\t: 1690.000\nprocessor\t: 1\ncpu MHz\t\t: 1741.000\n');
     await p.poll();
     expect(out.lobbies).toHaveLength(1);
-    // The 600 MHz governor case is news.
-    await writeFile(join(s.procDir, 'cpuinfo'), 'processor\t: 0\ncpu MHz\t\t: 600.000\nprocessor\t: 1\ncpu MHz\t\t: 600.000\n');
+    // Nor does a frequency that jumps from reading to reading, as a real one does, inside the same minute.
+    for (const mhz of [2800, 3500, 2300, 3200]) {
+      await writeFile(join(s.procDir, 'cpuinfo'), `processor\t: 0\ncpu MHz\t\t: ${mhz}.000\nprocessor\t: 1\ncpu MHz\t\t: ${mhz}.000\n`);
+      await p.poll();
+    }
+    expect(out.lobbies).toHaveLength(1);
+    // The next minute carries the figures of the moment.
+    now += 61_000;
     await p.poll();
     expect(out.lobbies).toHaveLength(2);
-    expect(out.lobbies[1]!.machine).toMatchObject({ cpuMhz: 600, load: 1.5 });
+    expect(out.lobbies[1]!.machine).toMatchObject({ cpuMhz: 3200, load: 1, cpuBraking: false });
+    // The firmware's brake is news at once: every core under 1 GHz.
+    await writeFile(join(s.procDir, 'cpuinfo'), 'processor\t: 0\ncpu MHz\t\t: 600.000\nprocessor\t: 1\ncpu MHz\t\t: 600.000\n');
+    await p.poll();
+    expect(out.lobbies).toHaveLength(3);
+    expect(out.lobbies[2]!.machine).toMatchObject({ cpuMhz: 600, cpuBraking: true });
+    p.stop();
+  });
+
+  it('brakes only when the mean and the fastest core are both under 1 GHz, judged on the readings before they are rounded', async () => {
+    const s = await state();
+    const out = sink();
+    const p = new GordonProvider({ ...s, panes: () => new Map(), now: () => NOW });
+    p.start(out.sink, 60_000);
+    // One core at 2400 MHz among slow ones: the mean is low, the machine is not braked.
+    await writeFile(join(s.procDir, 'cpuinfo'), 'processor\t: 0\ncpu MHz\t\t: 2400.000\nprocessor\t: 1\ncpu MHz\t\t: 600.000\n');
+    await p.poll();
+    expect(out.lobbies.at(-1)!.machine).toMatchObject({ cpuMhz: 1500, cpuBraking: false });
+    await writeFile(join(s.procDir, 'cpuinfo'), 'processor\t: 0\ncpu MHz\t\t: 990.000\nprocessor\t: 1\ncpu MHz\t\t: 960.000\n');
+    await p.poll();
+    // 975 MHz rounds to 1000, which is not under the brake, yet the readings are.
+    expect(out.lobbies.at(-1)!.machine).toMatchObject({ cpuMhz: 1000, cpuBraking: true });
     p.stop();
   });
 
@@ -183,7 +211,7 @@ describe('GordonProvider', () => {
     const p = new GordonProvider({ ...s, procDir: '/nonexistent/proc', panes: () => new Map(), now: () => NOW });
     p.start(out.sink, 60_000);
     await p.poll();
-    expect(out.lobbies[0]!.machine).toMatchObject({ load: 1, cpuMhz: 900, nproc: 24, memAvailableGb: 34 });
+    expect(out.lobbies[0]!.machine).toMatchObject({ load: 1, cpuMhz: 900, cpuBraking: null, nproc: 24, memAvailableGb: 34 });
     p.stop();
     const out2 = sink();
     await writeFile(join(s.dir, 'lobby.json'), JSON.stringify({ updated_at: '2026-10-16T14:02:11+02:00' }));
@@ -191,7 +219,7 @@ describe('GordonProvider', () => {
     q.start(out2.sink, 60_000);
     await q.poll();
     expect(out2.lobbies[0]!.machine).toEqual({
-      memAvailableGb: null, memTotalGb: null, slicePct: null, load: 1.5, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: 1700, nproc: 2,
+      memAvailableGb: null, memTotalGb: null, slicePct: null, load: 1, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: 1700, cpuBraking: false, nproc: 2,
     });
     q.stop();
   });

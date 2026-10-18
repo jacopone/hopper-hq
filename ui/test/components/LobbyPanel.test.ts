@@ -24,7 +24,7 @@ const detail: LobbyDetail = {
   turnTo: 'francesco@example.com',
   power: { usedBytes: 34.6 * 2 ** 30, maxBytes: 44.7 * 2 ** 30, warnPct: 85, held: false, pausedPanes: ['wE:p1E'], paused: [{ pane: 'wE:p1E', sessionId: 'S1', name: 'G-256 e2e' }] },
   cap: { working: 6, max: 7 },
-  machine: { memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1.5, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, nproc: 24 },
+  machine: { memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1.5, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, cpuBraking: false, nproc: 24 },
   limits: { memMinGb: 20, loadPerThread: 0.75, diskBusyPct: 60, psiMemPct: 10, slicePct: 75, brakeMhz: 1000 },
   capacity: { plan: 'tetto 7, al lavoro 6, liberi 1 · macchina ASPETTA · in fila 3 (1 rifiutate, 2 pronte)', byCap: 1, bySeats: 0, slotsFree: 0, binds: 'seats', nextReset: { at: NOW + 2 * 3_600_000, seat: 'Luca' } },
   seatLimitPct: 80,
@@ -133,19 +133,42 @@ describe('LobbyPanel', () => {
     expect(machine.querySelectorAll('.gauge.over')).toHaveLength(0);
     // Each gauge with a limit draws it as a mark: memory floor, 0.75 × threads, disk 60, pressure 10, the firmware's brake.
     expect([...machine.querySelectorAll('.gauge')].map((g) => g.querySelectorAll('.mark').length)).toEqual([1, 1, 1, 1, 1]);
-    expect(text(machine.querySelector('.p-sub, .measured'))).toBe('measured by the gate 12s ago');
+    expect(text(machine.querySelector('.measured'))).toBe("the gate's figures read 12s ago · load and CPU live");
   });
 
   it('marks a gauge over its limit, and the 600 MHz governor as throttled', () => {
-    const sick = { ...detail.machine!, memAvailableGb: 12, load: 20, diskBusyPct: 75, psiMemPct: 14, cpuMhz: 600, rebuild: true };
+    const sick = { ...detail.machine!, memAvailableGb: 12, load: 19, diskBusyPct: 75, psiMemPct: 14, cpuMhz: 600, cpuBraking: true, rebuild: true };
     const machine = panel({ ...detail, machine: sick }).section('Machine');
     expect([...machine.querySelectorAll('.gauge')].map((g) => g.classList.contains('over'))).toEqual([true, true, true, true, true]);
     expect(text([...machine.querySelectorAll('.gauge')].at(-1))).toBe('CPU 600 MHz · 24 cores · throttled');
     expect(text(machine.querySelector('.chip'))).toBe('rebuild under way');
   });
 
+  it("agrees with the gate on the load, which it floors, and on the brake, which the machine's own flag decides", () => {
+    const gauges = (m: Partial<NonNullable<LobbyDetail['machine']>>) => [...panel({ ...detail, machine: { ...detail.machine!, ...m } }).section('Machine').querySelectorAll('.gauge')];
+    // The gate refuses when floor(load) x 4 > threads x 3: 18 of 24 threads is still let in, 19 is not.
+    expect(gauges({ load: 18.5 })[1]!.classList.contains('over')).toBe(false);
+    cleanup();
+    expect(gauges({ load: 19 })[1]!.classList.contains('over')).toBe(true);
+    cleanup();
+    // A low mean with one fast core is not the brake; the flag says so, whatever the mean.
+    const slow = gauges({ cpuMhz: 700, cpuBraking: false }).at(-1)!;
+    expect([slow.classList.contains('over'), text(slow)]).toEqual([false, 'CPU 700 MHz · 24 cores']);
+    cleanup();
+    const braked = gauges({ cpuMhz: 1000, cpuBraking: true }).at(-1)!;
+    expect([braked.classList.contains('over'), text(braked)]).toEqual([true, 'CPU 1000 MHz · 24 cores · throttled']);
+  });
+
+  it('draws no pips when the number at work is not known, and says the seats are n/d when none are listed', () => {
+    const noPips = panel({ ...detail, cap: { working: null, max: 7 }, capacity: { ...detail.capacity, byCap: null, slotsFree: null, binds: null } }).section('Capacity');
+    expect(noPips.querySelectorAll('.pip')).toHaveLength(0);
+    cleanup();
+    const cap = panel({ ...detail, capacity: { ...detail.capacity, byCap: 6, bySeats: null, slotsFree: 6, binds: null, nextReset: null } }).section('Capacity');
+    expect(text(cap.querySelector('.cap-now'))).toBe('6 places free now · the cap leaves 6, the seats leave n/d');
+  });
+
   it('writes n/d for a figure the machine does not have, and says so when there is no reading at all', () => {
-    const blank = { memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, nproc: null };
+    const blank = { memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, cpuBraking: null, nproc: null };
     const machine = panel({ ...detail, machine: blank }).section('Machine');
     expect([...machine.querySelectorAll('.gauge')].map(text)).toEqual(['Memory available n/d', 'Load n/d', 'Disk busy n/d', 'Memory pressure n/d', 'CPU n/d']);
     expect(machine.querySelectorAll('.gauge.over')).toHaveLength(0);

@@ -60,8 +60,14 @@ type Accounts = Record<string, Account>;
 /** An accounts entry that is one: an object. A null or a string is skipped. */
 const account = (v: unknown): Account | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Account) : null);
 
-/** The Lobby without its date: what a change is judged by, so that a date alone never counts as news. */
-const contentOf = ({ updatedAt: _at, ...rest }: Lobby): string => JSON.stringify(rest);
+/** The Lobby without its date and without the CPU's load and frequency: what a change is judged by, so that a date or the jitter of a reading never counts as news. The brake stays in. */
+const contentOf = ({ updatedAt: _at, machine, ...rest }: Lobby): string => JSON.stringify({ ...rest, machine: machine && { ...machine, load: null, cpuMhz: null } });
+
+/** The CPU's rounded load and frequency, which are handed on when they changed and the last Lobby is this old. */
+const cpuOf = (l: Lobby): string => `${l.machine?.load ?? ''}|${l.machine?.cpuMhz ?? ''}`;
+
+/** The load and the frequency of the CPU move at every reading: a Lobby that differs in nothing else is handed on once a minute at most. */
+const CPU_REFRESH_MS = 60_000;
 
 /**
  * Reads Gordon's files every few seconds into one Lobby, and hands it on when it differs from the last. Read-only: it
@@ -73,6 +79,9 @@ export class GordonProvider implements GatekeeperProvider {
   /** The poll under way, so that a poll asked for meanwhile waits for it instead of reading twice. */
   private inflight: Promise<void> | null = null;
   private last: string | null = null;
+  /** The CPU figures and the time of the last Lobby handed on. */
+  private lastCpu: string | null = null;
+  private lastAt = 0;
   /** The task each session was last given, so that only changes are told. */
   private readonly tasks = new Map<string, string>();
   private readonly limitsDir: string;
@@ -112,8 +121,11 @@ export class GordonProvider implements GatekeeperProvider {
     try {
       const lobby = await this.read();
       const text = contentOf(lobby);
-      if (text !== this.last) {
+      const now = this.now();
+      if (text !== this.last || (cpuOf(lobby) !== this.lastCpu && now - this.lastAt >= CPU_REFRESH_MS)) {
         this.last = text;
+        this.lastCpu = cpuOf(lobby);
+        this.lastAt = now;
         this.sink?.lobby(lobby);
       }
     } catch (err) {
@@ -187,7 +199,7 @@ export class GordonProvider implements GatekeeperProvider {
       turnTo: seatTurn(seats),
       power: power ? { ...power, held, pausedPanes: watchdog.pausedPanes } : null,
       cap: file || limits.max !== null ? { working: file?.working ?? null, max: limits.max } : null,
-      machine: withCpu(file?.machine ?? null, cpu),
+      machine: withCpu(file?.machine ?? null, cpu, GORDON_LIMITS.brakeMhz),
       limits: GORDON_LIMITS,
       plan: file?.plan ?? null,
       updatedAt: file?.updatedAt ?? (newest.length ? Math.max(...newest) : now),

@@ -89,6 +89,8 @@ export interface Machine {
   rebuild: boolean | null;
   /** The mean frequency of the cores now (MHz). */
   cpuMhz: number | null;
+  /** The firmware is braking the CPU: the mean and the fastest core are both under the brake frequency. */
+  cpuBraking: boolean | null;
   nproc: number | null;
 }
 
@@ -111,11 +113,11 @@ export interface Capacity {
   plan: string | null;
   /** Places left under the working cap (cap minus working); null when either is unknown. */
   byCap: number | null;
-  /** Seats that take turns, are under the limit and have a fresh reading. */
-  bySeats: number;
-  /** The smaller of the two; null when the cap is unknown. */
+  /** Seats that take turns, are under the limit and have a fresh reading; null when the gatekeeper lists no seat. */
+  bySeats: number | null;
+  /** The smaller of the two (the cap alone when the seats are unknown); null when the cap is unknown. */
   slotsFree: number | null;
-  /** Which of the two is the smaller (the cap on a tie); null when the cap is unknown. */
+  /** Which of the two is the smaller (the cap on a tie); null when either is unknown. */
   binds: 'cap' | 'seats' | null;
   /** The earliest moment a full seat opens again (ms) and whose it is; null when none has a reset ahead. */
   nextReset: { at: number; seat: string } | null;

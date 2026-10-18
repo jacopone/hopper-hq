@@ -62,7 +62,7 @@ function opensAt(seat: Seat): number | null {
 export function capacityOf(l: Pick<Lobby, 'cap' | 'seats' | 'plan'>, now: number): Capacity {
   const byCap = l.cap && l.cap.max !== null && l.cap.working !== null ? Math.max(0, l.cap.max - l.cap.working) : null;
   const turns = l.seats.filter((s) => s.turnable);
-  const bySeats = turns.filter((s) => !s.full && !s.stale).length;
+  const bySeats = l.seats.length === 0 ? null : turns.filter((s) => !s.full && !s.stale).length;
   let nextReset: Capacity['nextReset'] = null;
   for (const s of turns) {
     const at = s.full ? opensAt(s) : null;
@@ -72,8 +72,8 @@ export function capacityOf(l: Pick<Lobby, 'cap' | 'seats' | 'plan'>, now: number
     plan: l.plan,
     byCap,
     bySeats,
-    slotsFree: byCap === null ? null : Math.min(byCap, bySeats),
-    binds: byCap === null ? null : byCap <= bySeats ? 'cap' : 'seats',
+    slotsFree: byCap === null ? null : bySeats === null ? byCap : Math.min(byCap, bySeats),
+    binds: byCap === null || bySeats === null ? null : byCap <= bySeats ? 'cap' : 'seats',
     nextReset,
   };
 }

@@ -21,7 +21,7 @@ const lobby: Lobby = {
   turnTo: null,
   power: { usedBytes: 36_000_000_000, maxBytes: 48_000_000_000, warnPct: 85, held: true, pausedPanes: ['wE:p1E', 'wZ:p9'] },
   cap: { working: 6, max: 7 },
-  machine: { memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1.5, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, nproc: 24 },
+  machine: { memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1.5, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1700, cpuBraking: false, nproc: 24 },
   limits: { memMinGb: 20, loadPerThread: 0.75, diskBusyPct: 60, psiMemPct: 10, slicePct: 75, brakeMhz: 1000 },
   plan: 'tetto 7, al lavoro 6, liberi 1\u202e · macchina ASPETTA',
   updatedAt: NOW - 500,

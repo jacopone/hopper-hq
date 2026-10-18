@@ -99,6 +99,10 @@ describe('capacityOf', () => {
     }
   });
 
+  it('does not know the seats when there is no list of them: the cap alone decides', () => {
+    expect(capacityOf({ cap: cap(1, 7), seats: [], plan: null }, NOW)).toMatchObject({ byCap: 6, bySeats: null, slotsFree: 6, binds: null });
+  });
+
   it('does not count a seat outside the rota, and counts none when every seat is full', () => {
     expect(capacityOf({ cap: cap(1, 7), seats: [seat('Giovanni', 21, { turnable: false }), seat('Luca', 86)], plan: null }, NOW)).toMatchObject({ bySeats: 0, slotsFree: 0, binds: 'seats' });
   });

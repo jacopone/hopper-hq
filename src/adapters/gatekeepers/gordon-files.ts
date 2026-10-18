@@ -11,6 +11,11 @@ const obj = (v: unknown): Obj | null => (v && typeof v === 'object' && !Array.is
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() ? v.trim() : null);
 const int = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
 const num = (v: unknown): number | null => (typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : null);
+/** A count that is a divisor somewhere: zero is not a count. */
+const pos = (v: unknown): number | null => {
+  const n = num(v);
+  return n !== null && n > 0 ? n : null;
+};
 
 /**
  * Where Gordon's gate refuses: the defaults of tools/admit.sh (ADMIT_MEM_MIN 20, load ≤ 0.75 × threads, disk < 60 %,
@@ -52,15 +57,16 @@ function parseMachine(v: unknown): Machine | null {
   if (!m) return null;
   return {
     memAvailableGb: num(m.mem_gb),
-    memTotalGb: num(m.mem_total_gb),
+    memTotalGb: pos(m.mem_total_gb),
     slicePct: num(m.slice_pct),
     load: num(m.load),
-    threads: num(m.threads),
+    threads: pos(m.threads),
     diskBusyPct: num(m.disk_busy_pct),
     psiMemPct: num(m.psi_mem_pct),
     rebuild: typeof m.rebuild === 'boolean' ? m.rebuild : null,
     cpuMhz: num(m.cpu_mhz),
-    nproc: num(m.nproc),
+    cpuBraking: null,
+    nproc: pos(m.nproc),
   };
 }
 
@@ -216,8 +222,17 @@ export async function readPower(cgroupDir: string, warnPct = 85): Promise<Pick<P
   return { usedBytes: used, maxBytes: /^\d+$/.test(cap) ? Number(cap) : null, warnPct };
 }
 
-/** The CPU now, from a /proc directory: the one-minute load, the mean MHz of the cores and the processors. Null for what cannot be read. */
-export async function readCpu(procDir = '/proc'): Promise<{ load: number | null; mhz: number | null; nproc: number | null }> {
+export interface Cpu {
+  load: number | null;
+  /** The mean frequency of the cores (MHz). */
+  mhz: number | null;
+  /** The frequency of the fastest core (MHz). */
+  mhzMax: number | null;
+  nproc: number | null;
+}
+
+/** The CPU now, from a /proc directory: the one-minute load, the mean and the highest MHz of the cores, and the processors. Null for what cannot be read. */
+export async function readCpu(procDir = '/proc'): Promise<Cpu> {
   const [load, info] = await Promise.all([
     readFile(join(procDir, 'loadavg'), 'utf8').catch(() => ''),
     readFile(join(procDir, 'cpuinfo'), 'utf8').catch(() => ''),
@@ -228,23 +243,27 @@ export async function readCpu(procDir = '/proc'): Promise<{ load: number | null;
   return {
     load: load.trim() !== '' && Number.isFinite(one) && one >= 0 ? one : null,
     mhz: mhz.length ? Math.round(mhz.reduce((a, b) => a + b, 0) / mhz.length) : null,
+    mhzMax: mhz.length ? Math.round(Math.max(...mhz)) : null,
     nproc: nproc > 0 ? nproc : null,
   };
 }
 
 /**
- * The gate's machine with the CPU read now laid over it. The live figures are rounded (load to the half, frequency to
- * 100 MHz) so that the jitter of a reading is not news to every browser; what is left is what a person would notice.
- * Without a live reading the gate's own figures stay; with neither, there is no machine.
+ * The gate's machine with the CPU read now laid over it. The live figures are rounded (load down to the half, as the
+ * gate takes its whole part; frequency to 100 MHz) so that the jitter of a reading is not news; what is left is what a
+ * person would notice. The brake is judged on the readings before they are rounded, as the gate judges it: the mean
+ * and the fastest core both under `brakeMhz`. Without a live reading the gate's own figures stay; with neither, there
+ * is no machine.
  */
-export function withCpu(machine: Machine | null, cpu: { load: number | null; mhz: number | null; nproc: number | null }): Machine | null {
+export function withCpu(machine: Machine | null, cpu: Cpu, brakeMhz: number): Machine | null {
   const live = cpu.load !== null || cpu.mhz !== null || cpu.nproc !== null;
   if (!machine && !live) return null;
-  const m: Machine = machine ?? { memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, nproc: null };
+  const m: Machine = machine ?? { memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, cpuBraking: null, nproc: null };
   return {
     ...m,
-    load: cpu.load === null ? m.load : Math.round(cpu.load * 2) / 2,
+    load: cpu.load === null ? m.load : Math.floor(cpu.load * 2) / 2,
     cpuMhz: cpu.mhz === null ? m.cpuMhz : Math.round(cpu.mhz / 100) * 100,
+    cpuBraking: cpu.mhz === null || cpu.mhzMax === null ? m.cpuBraking : cpu.mhz < brakeMhz && cpu.mhzMax < brakeMhz,
     nproc: cpu.nproc ?? m.nproc,
   };
 }

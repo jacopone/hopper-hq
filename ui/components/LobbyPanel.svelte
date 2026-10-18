@@ -75,7 +75,8 @@
             value: threads === null ? `${m.load}` : `${m.load} / ${threads} threads`,
             pct: threads === null ? null : share(m.load, threads),
             marks: lim && threads !== null ? [{ at: lim.loadPerThread * 100, label: `the gate refuses above ${lim.loadPerThread} × ${threads} threads` }] : [],
-            over: lim && threads !== null ? m.load > lim.loadPerThread * threads : false,
+            // The gate takes the whole part of the load: 18.9 of 24 threads is 18, and let in.
+            over: lim && threads !== null ? Math.floor(m.load) > lim.loadPerThread * threads : false,
           },
     );
     out.push(
@@ -88,7 +89,8 @@
         ? { label: 'Memory pressure', value: nd, pct: null, marks: [], over: false }
         : { label: 'Memory pressure', value: `${m.psiMemPct}%`, pct: m.psiMemPct, marks: lim ? [{ at: lim.psiMemPct, label: `the gate refuses at ${lim.psiMemPct}%` }] : [], over: lim ? m.psiMemPct >= lim.psiMemPct : false },
     );
-    const throttled = lim !== null && lim !== undefined && m.cpuMhz !== null && m.cpuMhz < lim.brakeMhz;
+    // The machine's own flag: the mean and the fastest core both under the brake frequency.
+    const throttled = m.cpuBraking === true;
     out.push(
       m.cpuMhz === null
         ? { label: 'CPU', value: nd, pct: null, marks: [], over: false }
@@ -111,7 +113,7 @@
   /** The places under the working cap as pips: at work, free now, and held back (by the seats or the pace). */
   const pips = $derived.by(() => {
     const max = lobby?.cap?.max;
-    if (!lobby || max === null || max === undefined) return [];
+    if (!lobby || max === null || max === undefined || lobby.cap?.working === null) return [];
     const working = Math.min(lobby.cap?.working ?? 0, max);
     const free = Math.min(lobby.capacity.slotsFree ?? 0, max - working);
     return [...Array(working).fill('working'), ...Array(free).fill('free'), ...Array(max - working - free).fill('held')] as ('working' | 'free' | 'held')[];
@@ -119,8 +121,8 @@
   const bindText = (c: LobbyDetail['capacity']) => (c.binds === 'cap' ? ' · the cap binds' : c.binds === 'seats' ? ' · the seats bind' : '');
   const capNow = (c: LobbyDetail['capacity']) =>
     c.slotsFree === null
-      ? `Places free now: ${nd} · the seats leave ${c.bySeats}`
-      : `${plural(c.slotsFree, 'place', 'places')} free now · the cap leaves ${c.byCap}, the seats leave ${c.bySeats}${bindText(c)}`;
+      ? `Places free now: ${nd} · the seats leave ${c.bySeats ?? nd}`
+      : `${plural(c.slotsFree, 'place', 'places')} free now · the cap leaves ${c.byCap}, the seats leave ${c.bySeats ?? nd}${bindText(c)}`;
 </script>
 
 <button type="button" class="linkbtn back" onclick={singleClick(onBack)}>← Building</button>
@@ -190,12 +192,12 @@
   <section>
     <h3 class="p-h3">Machine</h3>
     {#if lobby.machine}
-      <p class="measured p-note">measured by the gate {formatAgo(now - (lobby.gate?.at ?? lobby.updatedAt))} ago</p>
+      <p class="measured p-note">the gate's figures read {formatAgo(now - (lobby.gate?.at ?? lobby.updatedAt))} ago · load and CPU live</p>
       <div class="gauges">
         {#each gauges as g (g.label)}
           <div class="gauge" class:over={g.over}>
             <span class="g-label">{g.label}</span>
-            <Bar pct={g.pct} marks={g.marks} over={g.over} />
+            <span class="g-bar"><Bar pct={g.pct} marks={g.marks} over={g.over} /></span>
             <span class="g-value">{g.value}</span>
           </div>
         {/each}
@@ -271,10 +273,12 @@
   .cap-plan { color: var(--muted); }
   .measured { margin-bottom: 6px; }
   .gauges { display: grid; gap: 6px; }
-  .gauge { display: grid; grid-template-columns: 9.5em minmax(56px, 1fr) minmax(0, 14em); gap: 8px; align-items: center; font-family: var(--font-mono); font-size: 12.5px; }
+  .gauge { display: grid; grid-template-columns: auto minmax(0, 1fr); grid-template-areas: 'label value' 'bar bar'; gap: 3px 8px; align-items: baseline; font-family: var(--font-mono); font-size: 12.5px; }
+  .g-label { grid-area: label; color: var(--muted); }
+  .g-value { grid-area: value; text-align: right; overflow-wrap: anywhere; }
+  .g-bar { grid-area: bar; }
   .gauge.over .g-value { color: var(--needs-ink); font-weight: 500; }
-  .g-label { color: var(--muted); }
   .chip { display: inline-block; margin: 8px 0 0; padding: 1px 8px; border-radius: 10px; background: var(--hover); color: var(--needs-ink); font-size: 12px; }
-  .seats li { display: grid; grid-template-columns: minmax(0, 1fr) 7em; gap: 8px; align-items: center; }
-  .seat-bars { display: grid; gap: 3px; }
+  .seats li { display: grid; gap: 3px; }
+  .seat-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 </style>
