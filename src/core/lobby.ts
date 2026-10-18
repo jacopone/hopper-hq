@@ -1,4 +1,4 @@
-import type { Allowance, GateReason, GateReasonKind, Seat } from './types.js';
+import type { Allowance, Capacity, GateReason, GateReasonKind, Lobby, Seat } from './types.js';
 
 /** A task id at the start of a name: a short upper-case prefix, a dash, digits, then the end or a non-word character. */
 const TASK_ID = /^([A-Z][A-Z0-9]{0,4}-\d+)(?![\w-])/;
@@ -45,4 +45,35 @@ export function splitReasons(line: string): GateReason[] {
 /** The first seat in order that takes turns, is not the current one, is not full and has fresh readings; null when none. */
 export function seatTurn(seats: readonly Seat[]): string | null {
   return seats.find((s) => s.turnable && !s.current && !s.full && !s.stale)?.account ?? null;
+}
+
+/** The moment a full seat opens again: when the last of its windows over the limit resets; null when one of them has no reset. */
+function opensAt(seat: Seat): number | null {
+  const over = [seat.session, seat.week].filter((a): a is Allowance => a !== null && a.usedPct >= SEAT_LIMIT_PCT);
+  if (over.length === 0 || over.some((a) => a.resetsAt === null)) return null;
+  return Math.max(...over.map((a) => a.resetsAt!));
+}
+
+/**
+ * The room the building has now: the places under the working cap against the seats with margin (a seat that takes
+ * turns, under the limit, with a fresh reading), and when the earliest full seat opens again. A seat outside the rota
+ * gives the team no room, whether it is full or not.
+ */
+export function capacityOf(l: Pick<Lobby, 'cap' | 'seats' | 'plan'>, now: number): Capacity {
+  const byCap = l.cap && l.cap.max !== null && l.cap.working !== null ? Math.max(0, l.cap.max - l.cap.working) : null;
+  const turns = l.seats.filter((s) => s.turnable);
+  const bySeats = turns.filter((s) => !s.full && !s.stale).length;
+  let nextReset: Capacity['nextReset'] = null;
+  for (const s of turns) {
+    const at = s.full ? opensAt(s) : null;
+    if (at !== null && at > now && (nextReset === null || at < nextReset.at)) nextReset = { at, seat: s.name };
+  }
+  return {
+    plan: l.plan,
+    byCap,
+    bySeats,
+    slotsFree: byCap === null ? null : Math.min(byCap, bySeats),
+    binds: byCap === null ? null : byCap <= bySeats ? 'cap' : 'seats',
+    nextReset,
+  };
 }

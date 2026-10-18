@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { seatTurn } from '../../core/lobby.js';
 import type { Lobby } from '../../core/types.js';
-import { buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readPower, type LimitDoc } from './gordon-files.js';
+import { buildSeats, GORDON_LIMITS, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readCpu, readPower, withCpu, type LimitDoc } from './gordon-files.js';
 import type { GatekeeperProvider, GatekeeperSink } from './types.js';
 
 export interface GordonOptions {
@@ -13,6 +13,8 @@ export interface GordonOptions {
   limitsDir?: string;
   /** The sessions' cgroup (default: the user's claude.slice). */
   cgroupDir?: string;
+  /** Where the load and the cores' frequency are read (default /proc). */
+  procDir?: string;
   /** Each local session's pane, as the collector knows them, asked at every poll. */
   panes: () => ReadonlyMap<string, string>;
   now?: () => number;
@@ -75,6 +77,7 @@ export class GordonProvider implements GatekeeperProvider {
   private readonly tasks = new Map<string, string>();
   private readonly limitsDir: string;
   private readonly cgroupDir: string;
+  private readonly procDir: string;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
   private readonly logged = new Set<string>();
@@ -82,6 +85,7 @@ export class GordonProvider implements GatekeeperProvider {
   constructor(private readonly o: GordonOptions) {
     this.limitsDir = o.limitsDir ?? DEFAULT_LIMITS_DIR;
     this.cgroupDir = o.cgroupDir ?? DEFAULT_CGROUP_DIR;
+    this.procDir = o.procDir ?? '/proc';
     this.now = o.now ?? Date.now;
     this.log = o.log ?? ((line) => process.stderr.write(line + '\n'));
   }
@@ -149,7 +153,7 @@ export class GordonProvider implements GatekeeperProvider {
       this.file('tasks.jsonl'),
     ]);
     const [lobbyText, limitsText, watchdogText, accountsText, seatsLogText, orderText, tasksText] = reads.map((r) => r.text) as [string, string, string, string, string, string, string];
-    const [docs, power] = await Promise.all([this.limitDocs(), readPower(this.cgroupDir)]);
+    const [docs, power, cpu] = await Promise.all([this.limitDocs(), readPower(this.cgroupDir), readCpu(this.procDir)]);
     const file = parseLobbyFile(lobbyText);
     const limits = parseLimits(limitsText);
     const watchdog = parseWatchdogTail(watchdogText);
@@ -183,6 +187,9 @@ export class GordonProvider implements GatekeeperProvider {
       turnTo: seatTurn(seats),
       power: power ? { ...power, held, pausedPanes: watchdog.pausedPanes } : null,
       cap: file || limits.max !== null ? { working: file?.working ?? null, max: limits.max } : null,
+      machine: withCpu(file?.machine ?? null, cpu),
+      limits: GORDON_LIMITS,
+      plan: file?.plan ?? null,
       updatedAt: file?.updatedAt ?? (newest.length ? Math.max(...newest) : now),
     };
   }

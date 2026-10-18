@@ -67,9 +67,9 @@ describe('App shell', () => {
 
   it('opens the Lobby from its route, with a crumb, and asks the daemon for its detail', async () => {
     location.hash = '#/lobby';
-    const fetchLobby = vi.fn(async () => ({ ok: true as const, lobby: { version: 7 as const, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: NOW } }));
+    const fetchLobby = vi.fn(async () => ({ ok: true as const, lobby: { version: 8 as const, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, machine: null, limits: null, capacity: { plan: null, byCap: null, bySeats: 0, slotsFree: null, binds: null, nextReset: null }, seatLimitPct: 80, updatedAt: NOW } }));
     const scene = makeScene();
-    scene.lobby = { waiting: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW };
+    scene.lobby = { refused: 0, ready: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW };
     const { target, crumbs } = app(fakeStore({ scene }), { api: { fetchLobby } });
     await settle();
     expect(crumbs()).toBe('Building / Lobby');

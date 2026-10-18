@@ -3,9 +3,9 @@
  * Every string is cleaned by the server (control and bidi characters removed, length capped).
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
-import type { GateVerdict, Lobby, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting } from '../core/types.js';
+import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting } from '../core/types.js';
 
-export const SCENE_VERSION = 7;
+export const SCENE_VERSION = 8;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -77,7 +77,10 @@ export interface SceneTerminal {
 
 /** What the façade says of the Lobby. */
 export interface LobbySummary {
-  waiting: number;
+  /** Launches the gate turned away. */
+  refused: number;
+  /** Tasks with a brief written, waiting for a seat and a go. */
+  ready: number;
   seatsFull: number;
   /** Used memory as a percentage of the cap; null without a cap or a reading. */
   powerPct: number | null;
@@ -103,6 +106,13 @@ export interface LobbyDetail {
   turnTo: string | null;
   power: (Power & { paused: PausedSession[] }) | null;
   cap: Lobby['cap'];
+  /** The machine as the gate measured it, the CPU live; null without a reading. */
+  machine: Machine | null;
+  /** Where the gate refuses, for the gauges; null when the gatekeeper names none. */
+  limits: MachineLimits | null;
+  capacity: Capacity;
+  /** A seat is full at this percentage of either window. */
+  seatLimitPct: number;
   updatedAt: number;
 }
 

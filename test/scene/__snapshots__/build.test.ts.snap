@@ -444,7 +444,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 7,
+      "version": 8,
     },
     {
       "accounts": [],
@@ -656,7 +656,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 7,
+      "version": 8,
     },
     {
       "accounts": [],
@@ -907,7 +907,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "terminal": "tmux",
       "unseated": [],
       "unseatedMore": 0,
-      "version": 7,
+      "version": 8,
     },
   ],
   "scene": {
@@ -1131,7 +1131,7 @@ exports[`the demo building > matches the snapshot 1`] = `
       "mapped": 7,
       "reachable": null,
     },
-    "version": 7,
+    "version": 8,
   },
 }
 `;

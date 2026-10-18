@@ -43,6 +43,9 @@ export interface GateVerdict {
   at: number;
 }
 
+/** Why a launch waits: the gate turned it away, or its task is ready and waits for a seat and a go. */
+export type WaitingKind = 'refused' | 'ready';
+
 /** A launch waiting outside. */
 export interface Waiting {
   /** The orchestrator's id for it ('G-270'); unique in the queue. */
@@ -51,6 +54,42 @@ export interface Waiting {
   account: string | null;
   since: number;
   reason: GateReason | null;
+  kind: WaitingKind;
+}
+
+/** Where the gate refuses; the gatekeeper's own rules, so that a gauge can draw them. */
+export interface MachineLimits {
+  /** Refuses below this much available memory (GB). */
+  memMinGb: number;
+  /** Refuses above this share of the threads in load. */
+  loadPerThread: number;
+  /** Refuses at this disk busy percentage. */
+  diskBusyPct: number;
+  /** Refuses at this memory pressure percentage. */
+  psiMemPct: number;
+  /** Refuses at this share of the sessions' memory cap. */
+  slicePct: number;
+  /** Every core under this many MHz is the firmware's brake, not a slow machine. */
+  brakeMhz: number;
+}
+
+/** The machine the sessions share, as the gate measured it, with the CPU read live. Every figure is null when unknown. */
+export interface Machine {
+  /** Memory the machine can still give (GB). */
+  memAvailableGb: number | null;
+  memTotalGb: number | null;
+  /** The sessions' share of their memory cap, percent. */
+  slicePct: number | null;
+  /** The one-minute load average. */
+  load: number | null;
+  threads: number | null;
+  diskBusyPct: number | null;
+  psiMemPct: number | null;
+  /** A rebuild is under way. */
+  rebuild: boolean | null;
+  /** The mean frequency of the cores now (MHz). */
+  cpuMhz: number | null;
+  nproc: number | null;
 }
 
 /** The sessions' memory against their cap. */
@@ -66,6 +105,22 @@ export interface Power {
   pausedPanes: string[];
 }
 
+/** How many more sessions the building can take now, and what limits it. */
+export interface Capacity {
+  /** The gatekeeper's own line, as it wrote it. */
+  plan: string | null;
+  /** Places left under the working cap (cap minus working); null when either is unknown. */
+  byCap: number | null;
+  /** Seats that take turns, are under the limit and have a fresh reading. */
+  bySeats: number;
+  /** The smaller of the two; null when the cap is unknown. */
+  slotsFree: number | null;
+  /** Which of the two is the smaller (the cap on a tie); null when the cap is unknown. */
+  binds: 'cap' | 'seats' | null;
+  /** The earliest moment a full seat opens again (ms) and whose it is; null when none has a reset ahead. */
+  nextReset: { at: number; seat: string } | null;
+}
+
 /** What a gatekeeper shows in the Lobby (design 2026-10-16 §3). */
 export interface Lobby {
   doorman: { name: string };
@@ -76,6 +131,11 @@ export interface Lobby {
   turnTo: string | null;
   power: Power | null;
   cap: { working: number | null; max: number | null } | null;
+  machine: Machine | null;
+  /** Where the gate refuses (the gatekeeper's rules); null when it names none. */
+  limits: MachineLimits | null;
+  /** The gatekeeper's own one-line verdict on its capacity. */
+  plan: string | null;
   updatedAt: number;
 }
 

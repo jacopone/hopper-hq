@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readPower, timeOf,
+  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readCpu, readPower, timeOf,
 } from '../../src/adapters/gatekeepers/gordon-files.js';
 
 const NOW = Date.parse('2026-10-16T14:02:30+02:00');
@@ -13,6 +13,19 @@ describe('timeOf', () => {
     expect(timeOf('2026-10-16T14:02:11+02:00')).toBe(Date.parse('2026-10-16T14:02:11+02:00'));
     expect(timeOf(1792150178)).toBe(1792150178_000);
     for (const v of ['soon', '', null, undefined, {}, -1]) expect(timeOf(v)).toBeNull();
+  });
+
+  it("reads Gordon's registry dates ('2026-10-06 10:06', no offset) in the machine's own time zone", () => {
+    const tz = process.env.TZ;
+    try {
+      process.env.TZ = 'Europe/Rome';
+      expect(timeOf('2026-10-06 10:06')).toBe(Date.parse('2026-10-06T10:06:00+02:00'));
+      process.env.TZ = 'UTC';
+      expect(timeOf('2026-10-06 10:06')).toBe(Date.parse('2026-10-06T10:06:00Z'));
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
 });
 
@@ -41,8 +54,8 @@ describe('parseLobbyFile', () => {
       at: Date.parse('2026-10-16T14:02:11+02:00'),
     });
     expect(l.queue).toEqual([
-      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" } },
-      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null },
+      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" }, kind: 'refused' },
+      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null, kind: 'refused' },
     ]);
     expect(l.working).toBe(6);
   });
@@ -50,7 +63,55 @@ describe('parseLobbyFile', () => {
   it('reads a VIA verdict as go with no reasons, and is null for anything that is not the file', () => {
     expect(parseLobbyFile(JSON.stringify({ gate: { verdict: 'VIA', text: 'VIA: memoria 34 GB, slice 72%' } }))).toMatchObject({ gate: { go: true, reasons: [] }, queue: [], working: null, updatedAt: null });
     for (const bad of ['', '{', '[]', 'null', '"x"']) expect(parseLobbyFile(bad)).toBeNull();
-    expect(parseLobbyFile('{}')).toEqual({ gate: null, queue: [], working: null, updatedAt: null });
+    expect(parseLobbyFile('{}')).toEqual({ gate: null, queue: [], working: null, updatedAt: null, machine: null, plan: null });
+  });
+
+  it('tells a refused launch from a ready task, keeps the file order, and takes an entry with no kind for a refusal', () => {
+    const l = parseLobbyFile(JSON.stringify({
+      waiting: [
+        { id: 'G-1', name: 'a', reason: 'carico 49 > 0,75×24 thread', kind: 'rifiutata' },
+        { id: 'G-3', name: 'c', reason: 'pronta: brief scritto', kind: 'pronta' },
+        { id: 'G-2', name: 'b', reason: 'pronta: brief scritto', kind: 'pronta' },
+        { id: 'G-4', name: 'd' },
+        { id: 'G-5', name: 'e', kind: 'altro' },
+      ],
+    }))!;
+    expect(l.queue.map((w) => [w.id, w.kind])).toEqual([['G-1', 'refused'], ['G-3', 'ready'], ['G-2', 'ready'], ['G-4', 'refused'], ['G-5', 'refused']]);
+  });
+
+  it("reads the machine as the doorman measured it, and the capacity plan line; what is not a number is null", () => {
+    const l = parseLobbyFile(JSON.stringify({
+      updated_at: '2026-10-18T15:27:10+02:00',
+      machine: { mem_gb: 34, mem_total_gb: 62, slice_pct: 23, load: 1, threads: 24, disk_busy_pct: 0, psi_mem_pct: 0, rebuild: false, cpu_mhz: 1713, nproc: 24 },
+      capacity: { sessions_max: 7, working: 1, slots_free: 6, plan: 'tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)' },
+    }))!;
+    expect(l.machine).toEqual({
+      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1713, nproc: 24,
+    });
+    expect(l.plan).toBe('tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)');
+    const odd = parseLobbyFile(JSON.stringify({ machine: { mem_gb: '34', slice_pct: -1, load: null, threads: 24.5, rebuild: 'no' }, capacity: { plan: 7 } }))!;
+    expect(odd.machine).toEqual({
+      memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: 24.5, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, nproc: null,
+    });
+    expect(odd.plan).toBeNull();
+    for (const bad of [{ machine: [] }, { machine: 'x' }, { machine: null }, {}]) expect(parseLobbyFile(JSON.stringify(bad))!.machine).toBeNull();
+  });
+});
+
+describe('readCpu', () => {
+  it('reads the load, the mean MHz and the processors from a /proc directory', async () => {
+    const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
+    await writeFile(join(proc, 'loadavg'), '1.27 0.98 0.80 3/1893 3262771\n');
+    await writeFile(join(proc, 'cpuinfo'), ['processor\t: 0', 'cpu MHz\t\t: 600.000', '', 'processor\t: 1', 'cpu MHz\t\t: 1800.500', ''].join('\n'));
+    expect(await readCpu(proc)).toEqual({ load: 1.27, mhz: 1200, nproc: 2 });
+  });
+
+  it('gives null for what it cannot read', async () => {
+    const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, nproc: null });
+    await writeFile(join(proc, 'loadavg'), 'busy\n');
+    await writeFile(join(proc, 'cpuinfo'), 'model name\t: x\n');
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, nproc: null });
   });
 });
 

@@ -1,4 +1,5 @@
-import type { GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
+import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
+import type { Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
 import type { SessionView } from '../core/view.js';
 import { cleanOrNull, cleanText } from './text.js';
 import { SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession } from './types.js';
@@ -7,7 +8,8 @@ import { SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession 
 export function buildLobbySummary(l: Lobby): LobbySummary {
   const p = l.power;
   return {
-    waiting: l.queue.length,
+    refused: l.queue.filter((w) => w.kind === 'refused').length,
+    ready: l.queue.filter((w) => w.kind === 'ready').length,
     seatsFull: l.seats.filter((s) => s.full).length,
     powerPct: p && p.maxBytes ? Math.round((p.usedBytes / p.maxBytes) * 100) : null,
     held: p?.held ?? false,
@@ -25,6 +27,13 @@ const waitingOf = (w: Waiting): Waiting => ({
   account: cleanOrNull(w.account),
   since: w.since,
   reason: w.reason && { kind: w.reason.kind, text: cleanText(w.reason.text) },
+  kind: w.kind,
+});
+
+const capacityDetail = (c: Capacity): Capacity => ({
+  ...c,
+  plan: cleanOrNull(c.plan, 300),
+  nextReset: c.nextReset && { at: c.nextReset.at, seat: cleanText(c.nextReset.seat, 40) },
 });
 
 const seatOf = (s: Seat): Seat => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40) });
@@ -38,7 +47,7 @@ function pausedOf(panes: readonly string[], views: readonly SessionView[]): Paus
 }
 
 /** The Lobby in detail, every string cleaned, the doorman's own session found by its name. */
-export function buildLobbyDetail(l: Lobby, views: readonly SessionView[]): LobbyDetail {
+export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = Date.now()): LobbyDetail {
   const doorman = views.find((v) => v.effectiveState !== 'ended' && v.name?.toLowerCase() === l.doorman.name.toLowerCase());
   return {
     version: SCENE_VERSION,
@@ -49,6 +58,10 @@ export function buildLobbyDetail(l: Lobby, views: readonly SessionView[]): Lobby
     turnTo: cleanOrNull(l.turnTo),
     power: l.power && { ...l.power, pausedPanes: l.power.pausedPanes.map((p) => cleanText(p, 32)), paused: pausedOf(l.power.pausedPanes, views) },
     cap: l.cap,
+    machine: l.machine,
+    limits: l.limits,
+    capacity: capacityDetail(capacityOf(l, now)),
+    seatLimitPct: SEAT_LIMIT_PCT,
     updatedAt: l.updatedAt,
   };
 }

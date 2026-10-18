@@ -77,7 +77,7 @@ describe('GET /api/floor', () => {
 describe('GET /api/lobby', () => {
   it('answers 404 without a gatekeeper, and the detail with one, to the token and the cookie', async () => {
     expect((await call(port, { path: '/api/lobby', headers: bearer(TOKEN) })).status).toBe(404);
-    collector.setLobby({ doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: NOW });
+    collector.setLobby({ doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, machine: null, limits: null, plan: null, updatedAt: NOW });
     try {
       for (const headers of [bearer(TOKEN), { cookie }]) {
         const r = await call(port, { path: '/api/lobby', headers });

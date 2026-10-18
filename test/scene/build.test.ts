@@ -494,12 +494,12 @@ describe('wait reasons', () => {
   });
 });
 
-describe('version 7', () => {
+describe('version 8', () => {
   it('gives floors, desks and attention entries no rooms, interns, runs, summary, account or task while their sessions have none, tmux for a terminal, and no lobby', () => {
     const views = [view('a', ws('/w/api', 'main'), 'done')];
     const floor = buildFloorDetail(views, 'repo:/w/api')!;
-    expect(SCENE_VERSION).toBe(7);
-    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([7, [], 0, [], [], 'tmux']);
+    expect(SCENE_VERSION).toBe(8);
+    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([8, [], 0, [], [], 'tmux']);
     const desk = occupants(floor)[0]!;
     expect([desk.summary, desk.interns, desk.internsMore, desk.at, desk.runs, desk.account, desk.task]).toEqual([null, [], 0, { kind: 'desk' }, [], null, null]);
     const scene = buildScene(views);
