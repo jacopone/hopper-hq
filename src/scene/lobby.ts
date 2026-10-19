@@ -1,9 +1,9 @@
 import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
-import { repoRootOf } from '../core/view.js';
+import { byCodeUnit, repoRootOf } from '../core/view.js';
 import type { Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
 import type { SessionView } from '../core/view.js';
 import { FEATURE_SLOTS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from './palette.js';
-import { cleanOrNull, cleanText, taskTitle } from './text.js';
+import { cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
 import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard } from './types.js';
 
 /**
@@ -41,7 +41,9 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
   const p = l.power;
   const repos = repoSlots(views);
   // The turned away stand at the head of the line; each kind keeps the gatekeeper's order.
-  const line = [...l.queue.filter((w) => w.kind === 'refused'), ...l.queue.filter((w) => w.kind === 'ready')];
+  const live = liveTaskIds(views);
+  const outside = l.queue.filter((w) => !live.has(cleanText(w.id, 64)));
+  const line = [...outside.filter((w) => w.kind === 'refused'), ...outside.filter((w) => w.kind === 'ready')];
   const queue: QueueSlot[] = line.slice(0, QUEUE_MAX).map((w) => ({
     id: cleanText(w.id, 64),
     name: cleanText(w.name, 80),
@@ -52,8 +54,8 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
   }));
   return {
     doorman: cleanText(l.doorman.name, 40),
-    refused: l.queue.filter((w) => w.kind === 'refused').length,
-    ready: l.queue.filter((w) => w.kind === 'ready').length,
+    refused: outside.filter((w) => w.kind === 'refused').length,
+    ready: outside.filter((w) => w.kind === 'ready').length,
     seatsFull: l.seats.filter((s) => s.full).length,
     memory: p && p.maxBytes ? { pct: Math.max(0, Math.min(100, Math.round((p.usedBytes / p.maxBytes) * 100))), gatePct: l.limits?.slicePct ?? null, warnPct: p.warnPct } : null,
     held: p?.held ?? false,
@@ -64,8 +66,18 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
   };
 }
 
-/** A waiting launch's organisation: its task's area when the orchestrator names one, else the account of the profile it asked for. */
-const waitingOrg = (w: Waiting) => orgOfArea(w.area) ?? orgOfAccount(w.account);
+/** A waiting launch's organisation: its task's area when the orchestrator names one, else the account of the profile it asked for, as it is shown. */
+const waitingOrg = (w: Waiting) => orgOfArea(w.area) ?? orgOfAccount(cleanOrNull(w.account));
+
+/** The ids of the tasks that have a session in the building: a task that waits and is among them is drawn as live only. */
+function liveTaskIds(views: readonly SessionView[]): Set<string> {
+  const ids = new Set<string>();
+  for (const v of views) {
+    const id = cleanOrNull(v.task, 64);
+    if (id !== null && v.effectiveState !== 'ended') ids.add(id);
+  }
+  return ids;
+}
 
 const gateOf = (g: GateVerdict | null): GateVerdict | null =>
   g && { go: g.go, text: cleanText(g.text, 400), reasons: g.reasons.map((r) => ({ kind: r.kind, text: cleanText(r.text) })), at: g.at };
@@ -87,7 +99,7 @@ const capacityDetail = (c: Capacity): Capacity => ({
   nextReset: c.nextReset && { at: c.nextReset.at, seat: cleanText(c.nextReset.seat, 40) },
 });
 
-const seatOf = (s: Seat): SeatView => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40), org: orgOfAccount(s.account) });
+const seatOf = (s: Seat): SeatView => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40), org: orgOfAccount(cleanText(s.account)) });
 
 /** The paused panes, each with the live session in it when the building knows one. */
 function pausedOf(panes: readonly string[], views: readonly SessionView[]): PausedSession[] {
@@ -108,6 +120,8 @@ function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
     if (id === null || v.effectiveState === 'ended') continue;
     groups.set(id, [...(groups.get(id) ?? []), v]);
   }
+  // The sessions of a task in the order they started, so that the same views in any order give the same board.
+  for (const vs of groups.values()) vs.sort((a, b) => a.startedAt - b.startedAt || byCodeUnit(a.id, b.id));
   const waiting = [...l.queue.filter((w) => w.kind === 'refused'), ...l.queue.filter((w) => w.kind === 'ready')]
     .filter((w) => !groups.has(cleanText(w.id, 64)))
     .map((w): TaskCard => ({
@@ -127,18 +141,17 @@ function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
       id,
       title: taskTitle(vs[0]!),
       tie: slotOf(id, FEATURE_SLOTS),
-      org: vs.map((v) => orgOfAccount(v.account)).find((o) => o !== null) ?? null,
+      org: vs.map((v) => orgOfAccount(cleanOrNull(v.account))).find((o) => o !== null) ?? null,
       where: 'live',
       reason: null,
       since: null,
       account: null,
       sessions: vs.map((v) => ({
-        sessionId: v.id,
-        name: cleanOrNull(v.name, 60) ?? v.id.slice(0, 8),
+        sessionId: cleanText(v.id, KEY_MAX),
+        name: cleanOrNull(v.name, 60) ?? cleanText(v.id.slice(0, 8)),
         state: v.effectiveState as ShownState,
-        org: orgOfAccount(v.account),
+        org: orgOfAccount(cleanOrNull(v.account)),
         body: slotOf(repoRootOf(v), REPO_SLOTS),
-        badge: null,
       })),
       subagents: vs.reduce((n, v) => n + v.children.filter((c) => c.running).length + v.runs.reduce((m, r) => m + r.agents.filter((a) => a.running).length, 0), 0),
     }))

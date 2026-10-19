@@ -22,8 +22,8 @@ const detail: LobbyDetail = {
     {
       id: 'G-178', title: 'pr-medic-app', tie: 5, org: 'amatino', where: 'live', reason: null, since: null, account: null, subagents: 2,
       sessions: [
-        { sessionId: 'S1', name: 'pr-medic 1', state: 'working', org: 'amatino', body: 3, badge: null },
-        { sessionId: 'S2', name: 'pr-medic 2', state: 'needs_you', org: 'tenuta', body: 3, badge: null },
+        { sessionId: 'S1', name: 'pr-medic 1', state: 'working', org: 'amatino', body: 3 },
+        { sessionId: 'S2', name: 'pr-medic 2', state: 'needs_you', org: 'tenuta', body: 3 },
       ],
     },
   ],
@@ -122,6 +122,12 @@ describe('LobbyPanel', () => {
     expect(onDesk).toHaveBeenCalledWith('S1');
     cleanup();
     expect(text(panel({ ...detail, tasks: [] }).section('In the building').querySelector('.p-note'))).toBe('No task has a session in the building.');
+  });
+
+  it("draws every card and row even when two tasks carry the same id once cleaned", () => {
+    const twin = (title: string): TaskCard => ({ id: 'G-1', title, tie: 0, org: null, where: 'refused', reason: null, since: NOW, account: null, sessions: [], subagents: 0 });
+    const wait = panel({ ...detail, tasks: [twin('first'), twin('second')] }).section('Waiting outside');
+    expect([...wait.querySelectorAll('li')].map((li) => text(li).split(' · ')[0])).toEqual(['first', 'second']);
   });
 
   it("gives each seat the chip of its organisation", () => {

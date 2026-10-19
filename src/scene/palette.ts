@@ -26,14 +26,15 @@ const inDomain = (domain: string, root: string): boolean => domain === root || d
 export function orgOfAccount(account: string | null | undefined): Org | null {
   const m = /^[^@\s]+@([^@\s]+)$/.exec((account ?? '').trim());
   if (!m) return null;
-  const domain = m[1]!.toLowerCase();
+  const domain = m[1]!.toLowerCase().replace(/\.$/, '');
   if (inDomain(domain, 'amatino.ai')) return 'amatino';
   if (inDomain(domain, 'tenutalarnianone.com')) return 'tenuta';
   return PERSONAL_DOMAINS.has(domain) ? 'personal' : 'other';
 }
 
 /** The organisation of an orchestrator's task area ('amatino', 'tenuta', 'personali'); null for any other word. */
-export function orgOfArea(area: string | null | undefined): Org | null {
+export function orgOfArea(rawArea: string | null | undefined): Org | null {
+  const area = (rawArea ?? '').trim().toLowerCase();
   return area === 'amatino' ? 'amatino' : area === 'tenuta' ? 'tenuta' : area === 'personali' ? 'personal' : null;
 }
 

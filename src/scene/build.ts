@@ -271,10 +271,10 @@ function occupantOf(v: SessionView, label: (v: SessionView) => string, terminal:
     location: v.location,
     account: cleanOrNull(v.account),
     task: cleanOrNull(v.task, 64),
-    org: orgOfAccount(v.account),
+    org: orgOfAccount(cleanOrNull(v.account)),
     pane: cleanOrNull(v.tmuxPane),
     focusable: focusableOf(v, terminal),
-    robot: robotOf(state, repoRootOf(v), v.feature, cleanOrNull(v.task, 64), v.account),
+    robot: robotOf(state, repoRootOf(v), v.feature, cleanOrNull(v.task, 64), cleanOrNull(v.account)),
     at,
     checkout: checkoutOf(v, label),
   };
@@ -305,7 +305,7 @@ function roomOf({ run, host, crew }: RoomRun, slot: number, rect: GridRect): Mee
     phases: phasesOf(run),
     counts: countsOf(run),
     agents: meetingAgentsOf(run),
-    look: lookOf(repoRootOf(host), host.feature),
+    look: lookOf(repoRootOf(host), host.feature ?? cleanOrNull(host.task, 64)),
     rect,
     slot,
   };

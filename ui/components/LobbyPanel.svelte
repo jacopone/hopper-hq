@@ -165,7 +165,7 @@
       <div class="pips" role="img" aria-label="{lobby.cap?.working ?? 0} of {lobby.cap?.max} places at work">
         {#each pips as kind, i (i)}<span class="pip {kind}"></span>{/each}
       </div>
-      <p class="pip-key"><span class="swatch working"></span> at work <span class="swatch free"></span> free now <span class="swatch held"></span> held back</p>
+      <p class="pip-key"><span class="keyed working"></span> at work <span class="keyed free"></span> free now <span class="keyed held"></span> held back</p>
     {/if}
     {#if lobby.capacity.plan}<p class="cap-plan">{lobby.capacity.plan}</p>{/if}
     <p class="cap-now">{capNow(lobby.capacity)}</p>
@@ -178,7 +178,7 @@
         <div class="refused">
           <h4>Turned away · {refused.length}</h4>
           <ul class="list">
-            {#each refused as t (t.id)}
+            {#each refused as t, i (i)}
               <li class="row">
                 {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}<i class="swatch tie-{t.tie}"></i>
                 <span>{t.title ?? t.id}{t.account ? ` · ${t.account}` : ''}{t.since !== null ? ` · ${formatAgo(now - t.since)}` : ''}{t.reason ? ` · ${t.reason}` : ''}</span>
@@ -191,7 +191,7 @@
         <div class="ready">
           <h4>Ready, waiting for a seat and a go · {ready.length}</h4>
           <ul class="list">
-            {#each readyShown as t (t.id)}
+            {#each readyShown as t, i (i)}
               <li class="row">
                 {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}<i class="swatch tie-{t.tie}"></i>
                 <span>{t.title ?? t.id}{t.since !== null ? ` · ${formatAgo(now - t.since)}` : ''}</span>
@@ -211,7 +211,7 @@
     <h3 class="p-h3">In the building</h3>
     {#if live.length > 0}
       <div class="cards">
-        {#each live as t (t.id)}
+        {#each live as t, i (i)}
           <div class="card">
             {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}
             <div class="card-body">
@@ -334,7 +334,7 @@
   .pick { cursor: pointer; outline: none; }
   .pick:hover :global(.body), .pick:focus-visible :global(.body) { stroke: var(--accent); stroke-width: 1.2; }
   .pips { display: flex; flex-wrap: wrap; gap: 4px; }
-  .pip, .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; vertical-align: -2px; }
+  .pip, .keyed { display: inline-block; width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; vertical-align: -2px; }
   .working { background: var(--s-working); }
   .free { background: transparent; box-shadow: inset 0 0 0 2px var(--s-done); }
   .held { background: repeating-linear-gradient(45deg, var(--line) 0 3px, transparent 3px 6px); box-shadow: inset 0 0 0 1px var(--line); }

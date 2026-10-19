@@ -187,6 +187,29 @@ describe("the board of Gordon's tasks", () => {
     expect(live[0]!.org).toBe('amatino');
   });
 
+  it('gives the same board whatever the order of the views: the earliest session first, the title and the organisation from it', () => {
+    const a = session('S1', { task: 'G-5', account: 'luca@amatino.ai', state: 'working', startedAt: NOW - 20_000, title: 'first' });
+    const b = session('S2', { task: 'G-5', account: 'jacopo@tenutalarnianone.com', state: 'working', startedAt: NOW - 10_000, title: 'second' });
+    const forward = buildLobbyDetail(lobby, [a, b], NOW).tasks;
+    const backward = buildLobbyDetail(lobby, [b, a], NOW).tasks;
+    expect(JSON.stringify(backward)).toBe(JSON.stringify(forward));
+    const card = forward.find((t) => t.id === 'G-5')!;
+    expect([card.title, card.org, card.sessions.map((s) => s.sessionId)]).toEqual(['first', 'amatino', ['S1', 'S2']]);
+  });
+
+  it('cleans the id of a session it shows', () => {
+    const card = buildLobbyDetail(lobby, [session('S\u202e7', { task: 'G-5', state: 'working' })], NOW).tasks.find((t) => t.id === 'G-5')!;
+    expect(card.sessions[0]!.sessionId).toBe('S7');
+  });
+
+  it("draws a task that waits and already has a session once: the line outside and the counts leave it out, as the board does", () => {
+    const queue = [wait('G-5', 'ready'), wait('G-6', 'refused'), wait('G-7', 'ready')];
+    const live = [session('S1', { task: 'G-5', state: 'working' })];
+    const s = buildLobbySummary({ ...lobby, queue }, live);
+    expect(s.queue.map((q) => q.id)).toEqual(['G-6', 'G-7']);
+    expect([s.refused, s.ready, s.queueMore]).toEqual([1, 1, 0]);
+  });
+
   it('puts a task that waits and has a session in the building under the live ones only, once', () => {
     const d = buildLobbyDetail({ ...lobby, queue: [wait('G-5', 'ready')] }, [session('S1', { task: 'G-5', state: 'working' })], NOW);
     expect(d.tasks.map((t) => [t.id, t.where])).toEqual([['G-5', 'live']]);

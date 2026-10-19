@@ -248,6 +248,18 @@ describe('desks', () => {
     expect(orgs).toEqual({ a: 'amatino', b: 'tenuta', c: 'personal', d: null, e: null });
   });
 
+  it("takes the organisation from the account as it is shown, cleaned", () => {
+    const { floors } = render([view('a', ws('/w/api', 'main'), 'working', { account: 'luca@amatino.ai\u200b' })]);
+    const desk = occupants(floors[0]!)[0]!;
+    expect([desk.account, desk.org, desk.robot!.org]).toEqual(['luca@amatino.ai', 'amatino', 'amatino']);
+  });
+
+  it("gives the agents of a workflow room the tie of their host's task when the host has no feature", () => {
+    const views = [view('h', ws('/w/api', 'main'), 'working', { task: 'G-9', runs: [live('wf_0000aaaa-001', NOW - MIN)] })];
+    const room = render(views).floors[0]!.rooms[0]!;
+    expect(room.look.tie).toBe(slotOf('G-9', FEATURE_SLOTS));
+  });
+
   it("names the task of each window of the façade, so that a task's desks can be found across floors", () => {
     const views = [view('a', ws('/w/api', 'main'), 'working', { task: 'G-268' }), view('b', ws('/w/api', 'main'), 'working'), view('c', ws('/w/web', 'main'), 'done', { task: 'G-268' })];
     const { scene } = render(views);

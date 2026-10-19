@@ -135,7 +135,6 @@ export interface TaskSession {
   org: Org | null;
   /** Its repository's colour slot. */
   body: number;
-  badge: Badge | null;
 }
 
 /** One of the orchestrator's tasks on the board: at the door (refused, or ready for a seat), or with sessions in the building. */

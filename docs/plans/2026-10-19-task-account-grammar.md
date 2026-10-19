@@ -64,4 +64,6 @@ The doorman is the orchestrator's own robot: cap, headset, clipboard. At the doo
 - A task name that begins with a word fitting several repositories, or a repository name shared by two roots, colours no body: the robot is grey.
 - An account that is not an email has no lanyard.
 - The queue shows the first 8 launches; the rest are a group with a count.
-- Subagents and workflow agents wear no lanyard and the tie of their host.
+- Subagents and workflow agents wear no lanyard and the tie of their host (its feature's, else its task's).
+- The panel's robots and the façade's rings use the task's colour; in feature-floor mode a session whose 3D robot wears its feature's tie differs from them.
+- The task ring on the façade follows the pointer only; the Lobby board is the keyboard's way to a task's desks.

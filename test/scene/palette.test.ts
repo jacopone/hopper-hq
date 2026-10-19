@@ -60,6 +60,8 @@ describe('organisations', () => {
     expect(orgOfAccount('x@example.org')).toBe('other');
     // A look-alike is not the company's.
     expect(orgOfAccount('x@notamatino.ai')).toBe('other');
+    // A trailing dot is the same domain.
+    expect(orgOfAccount('a@amatino.ai.')).toBe('amatino');
     expect(orgOfAccount('x@amatino.ai.evil.com')).toBe('other');
   });
 
@@ -80,6 +82,7 @@ describe('organisations', () => {
     expect(orgOfArea('amatino')).toBe('amatino');
     expect(orgOfArea('tenuta')).toBe('tenuta');
     expect(orgOfArea('personali')).toBe('personal');
+    expect(orgOfArea(' Tenuta ')).toBe('tenuta');
     for (const a of ['elsewhere', '', null, undefined]) expect(orgOfArea(a)).toBeNull();
   });
 });
