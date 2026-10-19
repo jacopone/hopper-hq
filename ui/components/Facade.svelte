@@ -63,7 +63,7 @@
   <g class="queue">
     {@render solid(gate.apron, 'plinth')}
     <line class="queue-line" x1={gate.line[0]} y1={gate.line[1]} x2={gate.line[2]} y2={gate.line[3]} />
-    {#each l.queue as w, i (w.id)}
+    {#each l.queue as w, i (i)}
       {#if gate.slots[i]}
         <Bot x={gate.slots[i]![0]} y={gate.slots[i]![1]} slot={w.slot} badge={w.kind === 'refused' ? 'needs' : 'clock'} title={w.name} />
       {/if}
@@ -72,10 +72,10 @@
       {#each GROUP as [dx, dy], i (i)}
         <Bot x={gate.more[0] + dx!} y={gate.more[1] + dy!} u={19} kind="group" />
       {/each}
-      <g class="more-chip" transform="translate({gate.more[0] + 22} {gate.more[1] - 8})">
+      <g class="more-chip" transform="translate({gate.more[0]} {gate.more[1] + 13})">
         <title>{l.queueMore} more waiting</title>
-        <rect x={-chipWidth(l.queueMore) / 2} y="-8" width={chipWidth(l.queueMore)} height="14" rx="7" />
-        <text x="0" y="2.6">+{l.queueMore}</text>
+        <rect x={-chipWidth(l.queueMore) / 2} y="-7" width={chipWidth(l.queueMore)} height="14" rx="7" />
+        <text x="0" y="3.6">+{l.queueMore}</text>
       </g>
     {/if}
     <Bot x={gate.doorman[0]} y={gate.doorman[1]} kind="doorman" hat title="{l.doorman}, at the door" />

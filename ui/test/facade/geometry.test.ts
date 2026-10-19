@@ -160,11 +160,23 @@ describe('façade geometry', () => {
       for (const face of [g.apron.top, g.apron.left, g.apron.right]) for (const p of face.split(' ')) inside(...(p.split(',').map(Number) as [number, number]));
       // A robot is about 30 px tall, and its group's counter stands to the right.
       for (const [px, py] of [...g.slots, g.more, g.doorman]) { inside(px, py); inside(px, py - 34); }
-      inside(g.more[0] + 40, g.more[1]);
-      // Its cone stands 13 px over the lid.
-      inside(g.tank.cx - g.tank.rx, g.tank.cy - g.tank.legH - g.tank.h - 13);
-      inside(g.tank.cx + g.tank.rx, g.tank.cy);
+      // The counter hangs under the group, 36 px wide at the most and 20 px below its feet.
+      inside(g.more[0] - 18, g.more[1] + 20);
+      inside(g.more[0] + 18, g.more[1] + 20);
+      // The tank: its cone is 2 px wider a side than the lid and 13 px over it; its front legs reach a third of a radius below the base.
+      inside(g.tank.cx - g.tank.rx - 2, g.tank.cy - g.tank.legH - g.tank.h - 13);
+      inside(g.tank.cx + g.tank.rx + 2, g.tank.cy + 0.35 * g.tank.ry);
     }
+  });
+
+  it("hangs the group's counter clear of the last robot of the line", () => {
+    const g = facadeOf(makeScene().floors, true, true).gate!;
+    const last = g.slots[7]!;
+    // The counter spans 18 px either side of the group and from 6 to 20 px below its feet; a robot spans 14 px either side of its feet and 34 up to 3 down.
+    const chip = { x0: g.more[0] - 18, x1: g.more[0] + 18, y0: g.more[1] + 6, y1: g.more[1] + 20 };
+    const bot = { x0: last[0] - 14, x1: last[0] + 14, y0: last[1] - 34, y1: last[1] + 3 };
+    const overlap = chip.x0 < bot.x1 && bot.x0 < chip.x1 && chip.y0 < bot.y1 && bot.y0 < chip.y1;
+    expect(overlap).toBe(false);
   });
 
   it('keeps an empty building to its lobby and roof', () => {

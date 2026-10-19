@@ -59,6 +59,44 @@ describe('buildLobbySummary', () => {
     expect(s.queue.map((q) => q.slot)).toEqual([slotOf('/w/nixos-config', REPO_SLOTS), slotOf('/w/amatino-app', REPO_SLOTS), null, slotOf('/w/nixos-config', REPO_SLOTS)]);
   });
 
+  describe('the colour of a waiting task', () => {
+    const repoView = (root: string, repoName: string, id: string, state: 'ended' | null = null) =>
+      toView({ ...newSession(id, NOW, { ...ws, repoRoot: root, repoName, root, cwd: root }), name: id, ...(state ? { state } : {}) }, NOW);
+    const ready = (name: string) => ({ id: 'G-1', name, account: null, since: NOW, reason: null, kind: 'ready' as const });
+    const slots = (name: string, vs: ReturnType<typeof repoView>[]) => buildLobbySummary({ ...lobby, queue: [ready(name)] }, vs).queue[0]!.slot;
+
+    it('is none when two repositories share the name the task begins with, whatever the order of the views', () => {
+      const a = repoView('/w/a/api', 'api', 'A1');
+      const b = repoView('/w/b/api', 'api', 'A2');
+      expect(slots('api: fix', [a, b])).toBeNull();
+      expect(slots('api: fix', [b, a])).toBeNull();
+      expect(slots('api: fix', [a])).toBe(slotOf('/w/a/api', REPO_SLOTS));
+      const upper = repoView('/w/x/App', 'App', 'A3');
+      const lower = repoView('/w/y/app', 'app', 'A4');
+      expect(slots('app: fix', [upper, lower])).toEqual(slots('app: fix', [lower, upper]));
+    });
+
+    it('is none for a repository whose sessions have all ended: the building has no floor for it', () => {
+      expect(slots('api: fix', [repoView('/w/api', 'api', 'E1', 'ended')])).toBeNull();
+    });
+
+    it("reads a dotted repository name whole, and takes a word for the one repository whose name ends in it, and for no more than one", () => {
+      const foo = repoView('/w/foo', 'foo', 'D1');
+      const dotted = repoView('/w/foo.bar', 'foo.bar', 'D2');
+      expect(slots('foo.bar: x', [foo, dotted])).toBe(slotOf('/w/foo.bar', REPO_SLOTS));
+      expect(slots('foo: x', [foo, dotted])).toBe(slotOf('/w/foo', REPO_SLOTS));
+      const app = repoView('/w/amatino-app', 'amatino-app', 'S1');
+      const crm = repoView('/w/amatino-crm', 'amatino-crm', 'S2');
+      const other = repoView('/w/other-app', 'other-app', 'S3');
+      expect(slots('crm: x', [app, crm, other])).toBe(slotOf('/w/amatino-crm', REPO_SLOTS));
+      expect(slots('app: x', [app, crm, other])).toBeNull();
+    });
+  });
+
+  it('keeps the memory percentage within 0 and 100', () => {
+    expect(buildLobbySummary({ ...lobby, power: { ...lobby.power!, usedBytes: 80_000_000_000 } }, views).memory!.pct).toBe(100);
+  });
+
   it('cleans the names of the queue it lists', () => {
     expect(buildLobbySummary(lobby, views).queue[0]!.name).toBe('G-270 segnali a J');
   });

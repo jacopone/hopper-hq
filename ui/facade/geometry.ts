@@ -116,8 +116,9 @@ export interface GateModel {
 const GATE_STEP = 0.4;
 /** A robot stands about this tall on the page, its badge included. */
 const BOT_H = 34;
-/** The room the group's counter takes to the right of the group. */
-const CHIP_W = 40;
+/** The group's counter hangs under the group: half its widest, and how far below the group's feet its bottom edge is. */
+const CHIP_HALF = 24;
+const CHIP_DROP = 22;
 const TANK = { rx: 22, ry: 11, h: 34, legH: 11, cone: 13 } as const;
 
 export interface FacadeModel {
@@ -243,13 +244,15 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, wit
     };
     const slots = Array.from({ length: 8 }, (_, i) => stand(cx, D + 0.8 + GATE_STEP * i));
     const more = stand(cx, D + 0.8 + GATE_STEP * 8 + 0.2);
-    b.add([more[0] + CHIP_W, more[1]]);
+    b.add([more[0] - CHIP_HALF, more[1] + CHIP_DROP]);
+    b.add([more[0] + CHIP_HALF, more[1] + CHIP_DROP]);
     const doorman = stand(doorAt + 2.25, D + 0.45);
     const [l0x, l0y] = project(cx, D + 0.55, 0);
     const [l1x, l1y] = project(cx, yEnd - 0.6, 0);
     const [tx, ty] = project(1.25, 1.1, zr + 6).map(r1) as Point;
-    b.add([tx - TANK.rx, ty - TANK.legH - TANK.h - TANK.cone - 4]);
-    b.add([tx + TANK.rx, ty + 2]);
+    // The cone is wider than the lid by 2 px a side; the front legs stand a third of a radius ahead of the centre.
+    b.add([tx - TANK.rx - 2, ty - TANK.legH - TANK.h - TANK.cone - 4]);
+    b.add([tx + TANK.rx + 2, ty + 0.35 * TANK.ry + 1]);
     gate = {
       apron,
       line: [r1(l0x), r1(l0y), r1(l1x), r1(l1y)],

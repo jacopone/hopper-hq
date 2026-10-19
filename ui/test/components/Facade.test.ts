@@ -103,6 +103,12 @@ describe('Facade', () => {
     expect(tank(null).t).toBeNull();
   });
 
+  it('draws every place of the line even when two launches carry the same id once cleaned', () => {
+    const twin = (name: string) => ({ id: 'G-7', name, kind: 'ready' as const, slot: null });
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: [twin('first'), twin('second')], queueMore: 0 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect([...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman) title')].map(text)).toEqual(['first', 'second']);
+  });
+
   it('draws nothing of the queue or the tank without a gatekeeper, and a click on a robot opens the Lobby', () => {
     const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
     expect(plain.querySelector('.queue')).toBeNull();

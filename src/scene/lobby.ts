@@ -6,23 +6,34 @@ import { REPO_SLOTS, slotOf } from './palette.js';
 import { cleanOrNull, cleanText } from './text.js';
 import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot } from './types.js';
 
-/** The colour slot of each repository the building has a floor for, by its lower-case name. */
-function repoSlots(views: readonly SessionView[]): Map<string, number> {
-  const out = new Map<string, number>();
+/**
+ * The colour slot of each repository the building has a floor for (a live session works in it), by its lower-case name.
+ * Two repositories that share a name, or differ only by case, are ambiguous: neither is named, so that the colour does
+ * not depend on the order of the views, which the scene's JSON text must not.
+ */
+function repoSlots(views: readonly SessionView[]): Map<string, number | null> {
+  const roots = new Map<string, Set<string>>();
   for (const v of views) {
+    if (v.effectiveState === 'ended') continue;
     const name = v.workspace.repoName.toLowerCase();
-    if (!out.has(name)) out.set(name, slotOf(repoRootOf(v), REPO_SLOTS));
+    const set = roots.get(name);
+    if (set) set.add(repoRootOf(v));
+    else roots.set(name, new Set([repoRootOf(v)]));
   }
-  return out;
+  return new Map([...roots].map(([name, set]) => [name, set.size === 1 ? slotOf([...set][0]!, REPO_SLOTS) : null]));
 }
 
 /**
- * The repository a waiting task's name begins with ('nixos-config: il rebuild…', 'app: #3247…'): its own name, or the
- * name with 'amatino-' before it. A name that begins with neither names no repository the building knows.
+ * The repository a waiting task's name begins with ('nixos-config: il rebuild…', 'app: #3247…'): its own name, or else
+ * the one repository whose name ends in '-' and that word ('app' for 'amatino-app'). A name that begins with neither,
+ * or with a word that fits several, names no repository the building knows.
  */
-function slotOfName(name: string, repos: ReadonlyMap<string, number>): number | null {
-  const first = /^[A-Za-z0-9_-]+/.exec(name.trim())?.[0]?.toLowerCase();
-  return first ? (repos.get(first) ?? repos.get(`amatino-${first}`) ?? null) : null;
+function slotOfName(name: string, repos: ReadonlyMap<string, number | null>): number | null {
+  const first = /^[A-Za-z0-9._-]+/.exec(name.trim())?.[0]?.replace(/\.+$/, '').toLowerCase();
+  if (!first) return null;
+  if (repos.has(first)) return repos.get(first) ?? null;
+  const ends = [...repos].filter(([repo]) => repo.endsWith(`-${first}`));
+  return ends.length === 1 ? (ends[0]![1] ?? null) : null;
 }
 
 /** What the façade's Lobby label counts, the line outside its doors and the tank on its roof. */
@@ -37,7 +48,7 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
     refused: l.queue.filter((w) => w.kind === 'refused').length,
     ready: l.queue.filter((w) => w.kind === 'ready').length,
     seatsFull: l.seats.filter((s) => s.full).length,
-    memory: p && p.maxBytes ? { pct: Math.round((p.usedBytes / p.maxBytes) * 100), gatePct: l.limits?.slicePct ?? null, warnPct: p.warnPct } : null,
+    memory: p && p.maxBytes ? { pct: Math.max(0, Math.min(100, Math.round((p.usedBytes / p.maxBytes) * 100))), gatePct: l.limits?.slicePct ?? null, warnPct: p.warnPct } : null,
     held: p?.held ?? false,
     paused: p?.pausedPanes.length ?? 0,
     queue,
