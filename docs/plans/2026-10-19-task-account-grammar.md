@@ -56,7 +56,7 @@ The doorman is the orchestrator's own robot: cap, headset, clipboard. At the doo
 ## 6. Data
 
 - Session: `task`, `account` (existing).
-- `lobby.json` `waiting[]`: `id`, `name`, `profile`, `since`, `reason`, `kind`, and optional `area`, `repo`. The registry holds `area`, `repo` and `priority`; the orchestrator writing them into `waiting[]` replaces the guess hopper-hq makes from the task's name.
+- `lobby.json` `waiting[]`: `id`, `name`, `profile`, `since`, `reason`, `kind`, and optional `area`, `repo`. When `lobby.json` gives neither, the Gordon provider reads them from `tasks.jsonl` (the last word on each task; the area of the repository when none is written, as the registry does). The repository colours a waiting robot's body: its own name, or the one repository whose name starts or ends with it, or has its initials; the task's name is the last resort.
 - Scene: `Robot.tie` and `Robot.org`; `Occupant.org`; `FacadeWindow.task`; `LobbySummary.queue[]` with `tie` and `org`; `LobbyDetail.tasks[]` and `seats[].org`.
 
 ## 7. Failure modes

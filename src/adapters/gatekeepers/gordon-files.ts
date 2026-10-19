@@ -122,6 +122,29 @@ export function parseWatchdogTail(text: string): { pausedPanes: string[]; held: 
   return { pausedPanes: panes, held: /lanci fermati/.test(last) };
 }
 
+/** The area of a repository when the registry writes none (tools/task.py REPO_AREA, which area_of reads); an unknown repository has none. */
+const REPO_AREA: Readonly<Record<string, string>> = { app: 'amatino', crm: 'amatino', lf: 'amatino', vari: 'amatino', nixos: 'personali', bimby: 'personali', gordon: 'personali' };
+/** The areas the registry knows. */
+const AREAS: ReadonlySet<string> = new Set(['amatino', 'tenuta', 'personali']);
+
+/**
+ * tasks.jsonl: each task's repository and area. The registry folds its events with the last scalar winning; an area
+ * that is not one of its three, or none, is the repository's.
+ */
+export function parseTaskInfo(text: string): Map<string, { repo: string | null; area: string | null }> {
+  const raw = new Map<string, { repo: string | null; area: string | null }>();
+  for (const line of text.split('\n')) {
+    const e = obj(json(line));
+    const id = e && str(e.id);
+    if (!e || !id) continue;
+    const t = raw.get(id) ?? { repo: null, area: null };
+    t.repo = str(e.repo) ?? t.repo;
+    t.area = str(e.area) ?? t.area;
+    raw.set(id, t);
+  }
+  return new Map([...raw].map(([id, t]) => [id, { repo: t.repo, area: t.area !== null && AREAS.has(t.area) ? t.area : t.repo !== null ? (REPO_AREA[t.repo] ?? null) : null }]));
+}
+
 /** tasks.jsonl: the last task that named each pane. */
 export function parseTaskPanes(text: string): Map<string, string> {
   const out = new Map<string, string>();

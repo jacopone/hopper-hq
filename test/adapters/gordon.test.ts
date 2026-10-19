@@ -30,7 +30,7 @@ async function state() {
   await writeFile(join(dir, 'seats-accounts.json'), JSON.stringify({ 'Jacopo Anselmi': { email: 'jacopo@example.com' }, 'Leonardo Davinci': { email: 'leonardo@example.com', profile: 'leonardo' }, 'Personale (J)': { email: 'j@gmail.example', profile: 'personal' } }));
   await writeFile(join(dir, 'seats.jsonl'), '{"ev":"set","seat":"Jacopo Anselmi"}\n');
   await writeFile(join(dir, 'seats-order.txt'), 'Leonardo Davinci\n');
-  await writeFile(join(dir, 'tasks.jsonl'), JSON.stringify({ ev: 'update', id: 'G-268', sessions: [{ pane: 'wK:p2' }] }) + '\n');
+  await writeFile(join(dir, 'tasks.jsonl'), JSON.stringify({ ev: 'update', id: 'G-268', sessions: [{ pane: 'wK:p2' }] }) + '\n' + JSON.stringify({ ev: 'add', id: 'G-270', repo: 'nixos' }) + '\n');
   await writeFile(join(limitsDir, 'jacopo@example.com.json'), JSON.stringify({ email: 'jacopo@example.com', five_hour: { used_percentage: 6 }, seven_day: { used_percentage: 41 }, written_at: NOW / 1000 - 60 }));
   await writeFile(join(limitsDir, 'leonardo@example.com.json'), JSON.stringify({ email: 'leonardo@example.com', five_hour: { used_percentage: 9 }, seven_day: { used_percentage: 59 }, written_at: NOW / 1000 - 60 }));
   await writeFile(join(cgroupDir, 'memory.stat'), 'anon 17650155520\nshmem 0\n');
@@ -54,7 +54,7 @@ describe('GordonProvider', () => {
     expect(out.lobbies).toHaveLength(1);
     const l = out.lobbies[0]!;
     expect(l.gate).toMatchObject({ go: false, reasons: [{ kind: 'slice' }] });
-    expect(l.queue).toEqual([{ id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: 'slice delle sessioni al 84% del tetto' }, kind: 'refused', area: null, repo: null }]);
+    expect(l.queue).toEqual([{ id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: 'slice delle sessioni al 84% del tetto' }, kind: 'refused', area: 'personali', repo: 'nixos' }]);
     // The rota first, then the rest; the owner's seat takes turns, the personal account does not.
     expect(l.seats.map((x) => [x.name, x.current, x.turnable])).toEqual([['Leonardo', false, true], ['Jacopo', true, true], ['Personale', false, false]]);
     expect(l.turnTo).toBe('leonardo@example.com');

@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readCpu, readPower, timeOf,
+  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskInfo, parseTaskPanes, parseWatchdogTail, readCpu, readPower, timeOf,
 } from '../../src/adapters/gatekeepers/gordon-files.js';
 
 const NOW = Date.parse('2026-10-16T14:02:30+02:00');
@@ -147,6 +147,30 @@ describe('parseLimits and parseWatchdogTail', () => {
     expect(parseWatchdogTail(log + '\n16:48 avvio: soglie mem full avg10 ≥15% per 1\'')).toEqual({ pausedPanes: [], held: false });
     // A pane that is not herdr's is not a pane.
     expect(parseWatchdogTail('WATCHDOG: x → lanci fermati, pausa mandata a: wE:p1E %7 rm;-rf')).toEqual({ pausedPanes: ['wE:p1E'], held: true });
+  });
+});
+
+describe('parseTaskInfo', () => {
+  it("folds the registry's events into each task's repository and area, the last word winning, and takes the area of a repository as the registry does when none is written", () => {
+    const text = [
+      { ev: 'add', id: 'G-1', repo: 'nixos', title: 'x' },
+      { ev: 'add', id: 'G-2', repo: 'app', area: 'tenuta' },
+      { ev: 'update', id: 'G-2', note: 'later, without a word on either' },
+      { ev: 'add', id: 'G-3', repo: 'vari' },
+      { ev: 'update', id: 'G-3', repo: 'lf' },
+      { ev: 'add', id: 'G-4', repo: 'unknown' },
+      { ev: 'add', id: 'G-5' },
+      { ev: 'add', id: 'G-6', repo: 'app', area: 'elsewhere' },
+    ].map((e) => JSON.stringify(e)).join('\n') + '\nnot json\n';
+    const info = parseTaskInfo(text);
+    expect([...info]).toEqual([
+      ['G-1', { repo: 'nixos', area: 'personali' }],
+      ['G-2', { repo: 'app', area: 'tenuta' }],
+      ['G-3', { repo: 'lf', area: 'amatino' }],
+      ['G-4', { repo: 'unknown', area: null }],
+      ['G-5', { repo: null, area: null }],
+      ['G-6', { repo: 'app', area: 'amatino' }],
+    ]);
   });
 });
 

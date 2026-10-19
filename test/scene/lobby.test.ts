@@ -94,6 +94,21 @@ describe('buildLobbySummary', () => {
       expect(slots('app: fix', [upper, lower])).toEqual(slots('app: fix', [lower, upper]));
     });
 
+    it("reads the repository the orchestrator gives, before the name: its own name, or the one repository whose name starts or ends with it, or has its initials", () => {
+      const nixos = repoView('/w/nixos-config', 'nixos-config', 'N1');
+      const legal = repoView('/w/legal-finance', 'legal-finance', 'N2');
+      const app = repoView('/w/amatino-app', 'amatino-app', 'N3');
+      const all = [nixos, legal, app];
+      const slotFor = (repo: string | null, name = 'G-1 something else') => buildLobbySummary({ ...lobby, queue: [{ ...ready(name), repo }] }, all).queue[0]!.slot;
+      expect(slotFor('nixos')).toBe(slotOf('/w/nixos-config', REPO_SLOTS));
+      expect(slotFor('lf')).toBe(slotOf('/w/legal-finance', REPO_SLOTS));
+      expect(slotFor('app')).toBe(slotOf('/w/amatino-app', REPO_SLOTS));
+      expect(slotFor('vari')).toBeNull();
+      // The repository outranks the name; with none given, the name still speaks.
+      expect(slotFor('app', 'nixos-config: il rebuild')).toBe(slotOf('/w/amatino-app', REPO_SLOTS));
+      expect(slotFor(null, 'nixos-config: il rebuild')).toBe(slotOf('/w/nixos-config', REPO_SLOTS));
+    });
+
     it('is none for a repository whose sessions have all ended: the building has no floor for it', () => {
       expect(slots('api: fix', [repoView('/w/api', 'api', 'E1', 'ended')])).toBeNull();
     });

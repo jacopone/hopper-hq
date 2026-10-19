@@ -32,9 +32,14 @@ function slotOfName(name: string, repos: ReadonlyMap<string, number | null>): nu
   const first = /^[A-Za-z0-9._-]+/.exec(name.trim())?.[0]?.replace(/\.+$/, '').toLowerCase();
   if (!first) return null;
   if (repos.has(first)) return repos.get(first) ?? null;
-  const ends = [...repos].filter(([repo]) => repo.endsWith(`-${first}`));
-  return ends.length === 1 ? (ends[0]![1] ?? null) : null;
+  // The one repository whose name ends in '-word' ('app' for 'amatino-app'), starts with 'word-' ('nixos' for
+  // 'nixos-config') or is made of words with these initials ('lf' for 'legal-finance').
+  const fits = [...repos].filter(([repo]) => repo.endsWith(`-${first}`) || repo.startsWith(`${first}-`) || repo.split('-').map((w) => w[0]).join('') === first);
+  return fits.length === 1 ? (fits[0]![1] ?? null) : null;
 }
+
+/** The colour slot of a waiting launch's robot: the repository the orchestrator gives it, else the one its name begins with. */
+const slotOfWaiting = (w: Waiting, repos: ReadonlyMap<string, number | null>): number | null => (w.repo ? slotOfName(w.repo, repos) : null) ?? slotOfName(w.name, repos);
 
 /** What the façade's Lobby label counts, the line outside its doors and the tank on its roof. */
 export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []): LobbySummary {
@@ -48,7 +53,7 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
     id: cleanText(w.id, 64),
     name: cleanText(w.name, 80),
     kind: w.kind,
-    slot: slotOfName(w.name, repos),
+    slot: slotOfWaiting(w, repos),
     tie: slotOf(cleanText(w.id, 64), FEATURE_SLOTS),
     org: waitingOrg(w),
   }));

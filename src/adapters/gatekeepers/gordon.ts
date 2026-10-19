@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { seatTurn } from '../../core/lobby.js';
 import type { Lobby } from '../../core/types.js';
-import { buildSeats, GORDON_LIMITS, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readCpu, readPower, withCpu, type LimitDoc } from './gordon-files.js';
+import { buildSeats, GORDON_LIMITS, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskInfo, parseTaskPanes, parseWatchdogTail, readCpu, readPower, withCpu, type LimitDoc } from './gordon-files.js';
 import type { GatekeeperProvider, GatekeeperSink } from './types.js';
 
 export interface GordonOptions {
@@ -185,7 +185,14 @@ export class GordonProvider implements GatekeeperProvider {
     const seats = buildSeats(docs, accounts, order, parseSeatsLog(seatsLogText), now);
     // A waiting launch names its profile; the accounts file maps a profile to its email.
     const emailOfProfile = new Map(Object.values(accounts).flatMap((a) => (a.profile && a.email ? [[a.profile, a.email] as const] : [])));
-    const queue = (file?.queue ?? []).map(({ profile, ...w }) => ({ ...w, account: profile ? (emailOfProfile.get(profile) ?? profile) : null }));
+    // lobby.json says a task's area and repository when it knows them; the registry, which the orchestrator writes it from, says them otherwise.
+    const info = parseTaskInfo(tasksText);
+    const queue = (file?.queue ?? []).map(({ profile, ...w }) => ({
+      ...w,
+      area: w.area ?? info.get(w.id)?.area ?? null,
+      repo: w.repo ?? info.get(w.id)?.repo ?? null,
+      account: profile ? (emailOfProfile.get(profile) ?? profile) : null,
+    }));
     this.announceTasks(parseTaskPanes(tasksText));
     // The watchdog writes the cap it holds into limits.json: that file is the word on the hold, the log only when it cannot be read.
     const held = limits.max !== null ? limits.max === 0 : watchdog.held;
