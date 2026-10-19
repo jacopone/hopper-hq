@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest';
 import { newSession } from '../../src/core/reducer.js';
+import { slotOf, REPO_SLOTS } from '../../src/scene/palette.js';
 import type { Lobby } from '../../src/core/types.js';
 import { toView } from '../../src/core/view.js';
 import { buildLobbyDetail, buildLobbySummary } from '../../src/scene/lobby.js';
-import { SCENE_VERSION } from '../../src/scene/types.js';
+import { QUEUE_MAX, SCENE_VERSION } from '../../src/scene/types.js';
 
 const NOW = 1_792_150_000_000;
 const lobby: Lobby = {
@@ -34,9 +35,32 @@ const views = [
 
 describe('buildLobbySummary', () => {
   it('counts what the façade shows', () => {
-    expect(buildLobbySummary(lobby)).toEqual({ refused: 1, ready: 2, seatsFull: 1, powerPct: 75, held: true, paused: 2, updatedAt: NOW - 500 });
-    expect(buildLobbySummary({ ...lobby, power: null }).powerPct).toBeNull();
-    expect(buildLobbySummary({ ...lobby, power: { ...lobby.power!, maxBytes: null } }).powerPct).toBeNull();
+    expect(buildLobbySummary(lobby, views)).toMatchObject({ doorman: 'Gordon', refused: 1, ready: 2, seatsFull: 1, held: true, paused: 2, queueMore: 0, updatedAt: NOW - 500 });
+    expect(buildLobbySummary(lobby, views).memory).toEqual({ pct: 75, gatePct: 75, warnPct: 85 });
+    expect(buildLobbySummary({ ...lobby, limits: null }, views).memory).toEqual({ pct: 75, gatePct: null, warnPct: 85 });
+    expect(buildLobbySummary({ ...lobby, power: null }, views).memory).toBeNull();
+    expect(buildLobbySummary({ ...lobby, power: { ...lobby.power!, maxBytes: null } }, views).memory).toBeNull();
+  });
+
+  it('lists the first places of the queue, the refused first and the ready in the order given, and counts the rest', () => {
+    const ready = Array.from({ length: 10 }, (_, i) => ({ id: `G-${200 + i}`, name: `G-${200 + i} task`, account: null, since: NOW, reason: null, kind: 'ready' as const }));
+    const s = buildLobbySummary({ ...lobby, queue: [ready[0]!, lobby.queue[0]!, ...ready.slice(1)] }, views);
+    expect(QUEUE_MAX).toBe(8);
+    expect(s.queue).toHaveLength(8);
+    expect(s.queue.map((q) => [q.id, q.kind])).toEqual([['G-270', 'refused'], ['G-200', 'ready'], ['G-201', 'ready'], ['G-202', 'ready'], ['G-203', 'ready'], ['G-204', 'ready'], ['G-205', 'ready'], ['G-206', 'ready']]);
+    expect([s.refused, s.ready, s.queueMore]).toEqual([1, 10, 3]);
+  });
+
+  it("colours a waiting task's robot with its repository's slot when its name begins with the repository, and leaves it grey otherwise", () => {
+    const repoView = (root: string, repoName: string, id: string) => toView({ ...newSession(id, NOW, { ...ws, repoRoot: root, repoName, root, cwd: root }), name: id }, NOW);
+    const known = [repoView('/w/nixos-config', 'nixos-config', 'R1'), repoView('/w/amatino-app', 'amatino-app', 'R2')];
+    const w = (id: string, name: string) => ({ id, name, account: null, since: NOW, reason: null, kind: 'ready' as const });
+    const s = buildLobbySummary({ ...lobby, queue: [w('G-1', 'nixos-config: il rebuild si ferma'), w('G-2', 'app: #3247 in conflitto'), w('G-3', 'Wi-Fi del portatile'), w('G-4', 'NIXOS-CONFIG segnali')] }, known);
+    expect(s.queue.map((q) => q.slot)).toEqual([slotOf('/w/nixos-config', REPO_SLOTS), slotOf('/w/amatino-app', REPO_SLOTS), null, slotOf('/w/nixos-config', REPO_SLOTS)]);
+  });
+
+  it('cleans the names of the queue it lists', () => {
+    expect(buildLobbySummary(lobby, views).queue[0]!.name).toBe('G-270 segnali a J');
   });
 });
 

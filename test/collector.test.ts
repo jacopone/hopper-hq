@@ -54,7 +54,7 @@ describe('the Lobby', () => {
     c.setLobby(lobby);
     c.setLobby({ ...lobby });
     expect(told).toBe(1);
-    expect(c.scene().lobby).toEqual({ refused: 0, ready: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW });
+    expect(c.scene().lobby).toEqual({ doorman: 'Gordon', refused: 0, ready: 0, seatsFull: 0, memory: null, held: false, paused: 0, queue: [], queueMore: 0, updatedAt: NOW });
     expect(c.lobbyDetail()).toMatchObject({ version: 8, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
     await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, tmuxPane: 'wK:p2' }));
     expect([...c.localPanes()]).toEqual([['S1', 'wK:p2']]);

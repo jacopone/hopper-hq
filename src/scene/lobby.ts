@@ -1,19 +1,47 @@
 import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
+import { repoRootOf } from '../core/view.js';
 import type { Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
 import type { SessionView } from '../core/view.js';
+import { REPO_SLOTS, slotOf } from './palette.js';
 import { cleanOrNull, cleanText } from './text.js';
-import { SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession } from './types.js';
+import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot } from './types.js';
 
-/** What the façade's Lobby label counts. */
-export function buildLobbySummary(l: Lobby): LobbySummary {
+/** The colour slot of each repository the building has a floor for, by its lower-case name. */
+function repoSlots(views: readonly SessionView[]): Map<string, number> {
+  const out = new Map<string, number>();
+  for (const v of views) {
+    const name = v.workspace.repoName.toLowerCase();
+    if (!out.has(name)) out.set(name, slotOf(repoRootOf(v), REPO_SLOTS));
+  }
+  return out;
+}
+
+/**
+ * The repository a waiting task's name begins with ('nixos-config: il rebuild…', 'app: #3247…'): its own name, or the
+ * name with 'amatino-' before it. A name that begins with neither names no repository the building knows.
+ */
+function slotOfName(name: string, repos: ReadonlyMap<string, number>): number | null {
+  const first = /^[A-Za-z0-9_-]+/.exec(name.trim())?.[0]?.toLowerCase();
+  return first ? (repos.get(first) ?? repos.get(`amatino-${first}`) ?? null) : null;
+}
+
+/** What the façade's Lobby label counts, the line outside its doors and the tank on its roof. */
+export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []): LobbySummary {
   const p = l.power;
+  const repos = repoSlots(views);
+  // The turned away stand at the head of the line; each kind keeps the gatekeeper's order.
+  const line = [...l.queue.filter((w) => w.kind === 'refused'), ...l.queue.filter((w) => w.kind === 'ready')];
+  const queue: QueueSlot[] = line.slice(0, QUEUE_MAX).map((w) => ({ id: cleanText(w.id, 64), name: cleanText(w.name, 80), kind: w.kind, slot: slotOfName(w.name, repos) }));
   return {
+    doorman: cleanText(l.doorman.name, 40),
     refused: l.queue.filter((w) => w.kind === 'refused').length,
     ready: l.queue.filter((w) => w.kind === 'ready').length,
     seatsFull: l.seats.filter((s) => s.full).length,
-    powerPct: p && p.maxBytes ? Math.round((p.usedBytes / p.maxBytes) * 100) : null,
+    memory: p && p.maxBytes ? { pct: Math.round((p.usedBytes / p.maxBytes) * 100), gatePct: l.limits?.slicePct ?? null, warnPct: p.warnPct } : null,
     held: p?.held ?? false,
     paused: p?.pausedPanes.length ?? 0,
+    queue,
+    queueMore: Math.max(0, line.length - QUEUE_MAX),
     updatedAt: l.updatedAt,
   };
 }

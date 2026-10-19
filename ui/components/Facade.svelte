@@ -1,8 +1,10 @@
 <script lang="ts">
   import { cleanText } from '../../src/scene/text';
   import type { FloorSummary, LobbySummary } from '../../src/scene/types';
-  import { MIN_SCALE, NAME_MAX, facadeOf, type Box, type Label } from '../facade/geometry';
+  import { MIN_SCALE, NAME_MAX, facadeOf, type Box, type GateModel, type Label } from '../facade/geometry';
   import { STATES, floorLabel, floorMeta, lobbyLabel, lobbyMeta, type Meta } from '../lib/words';
+  import Bot from './Bot.svelte';
+  import Tank from './Tank.svelte';
 
   /**
    * The building from outside: one window per desk of each floor's plan, coloured by the state of whoever sits there and
@@ -30,7 +32,10 @@
     onLobby();
   }
 
-  const model = $derived(facadeOf(floors, lobby !== null && lobbyMeta(lobby).length > 0));
+  const model = $derived(facadeOf(floors, lobby !== null && lobbyMeta(lobby).length > 0, lobby !== null));
+  /** The group beyond the line: three robots close together, a little smaller. */
+  const GROUP: [number, number][] = [[-7, -3], [7, -3], [0, 2.5]];
+  const chipWidth = (n: number) => 10 + 6.5 * `+${n}`.length;
   const byKey = $derived(new Map(floors.map((f) => [f.key, f])));
 
   function pick(e: MouseEvent, key: string): void {
@@ -51,6 +56,29 @@
     <polygon class="l" points={b.left} />
     <polygon class="r" points={b.right} />
     <polygon class="t" points={b.top} />
+  </g>
+{/snippet}
+
+{#snippet queue(gate: GateModel, l: LobbySummary)}
+  <g class="queue">
+    {@render solid(gate.apron, 'plinth')}
+    <line class="queue-line" x1={gate.line[0]} y1={gate.line[1]} x2={gate.line[2]} y2={gate.line[3]} />
+    {#each l.queue as w, i (w.id)}
+      {#if gate.slots[i]}
+        <Bot x={gate.slots[i]![0]} y={gate.slots[i]![1]} slot={w.slot} badge={w.kind === 'refused' ? 'needs' : 'clock'} title={w.name} />
+      {/if}
+    {/each}
+    {#if l.queueMore > 0}
+      {#each GROUP as [dx, dy], i (i)}
+        <Bot x={gate.more[0] + dx!} y={gate.more[1] + dy!} u={19} kind="group" />
+      {/each}
+      <g class="more-chip" transform="translate({gate.more[0] + 22} {gate.more[1] - 8})">
+        <title>{l.queueMore} more waiting</title>
+        <rect x={-chipWidth(l.queueMore) / 2} y="-8" width={chipWidth(l.queueMore)} height="14" rx="7" />
+        <text x="0" y="2.6">+{l.queueMore}</text>
+      </g>
+    {/if}
+    <Bot x={gate.doorman[0]} y={gate.doorman[1]} kind="doorman" hat title="{l.doorman}, at the door" />
   </g>
 {/snippet}
 
@@ -82,6 +110,7 @@
       {#each model.lobby.windows as quad, i (i)}<polygon class="sfill st-empty" points={quad} />{/each}
       {#each model.lobby.doors as quad, i (i)}<polygon class="door" points={quad} />{/each}
       <polygon class="sfill st-empty" points={model.lobby.side} />
+      {#if model.gate}{@render queue(model.gate, lobby)}{/if}
       {@render label(model.lobby.label, 'L', 'Lobby', lobbyMeta(lobby))}
     </g>
   {:else}
@@ -124,6 +153,7 @@
   <g class="roof">
     {@render solid(model.roof.slab, 'roof')}
     {#each model.roof.units as unit, i (i)}{@render solid(unit, 'unit')}{/each}
+    {#if model.gate && lobby?.memory}<Tank tank={model.gate.tank} pct={lobby.memory.pct} gatePct={lobby.memory.gatePct} warnPct={lobby.memory.warnPct} />{/if}
     <line class="mast" x1={model.roof.mast[0]} y1={model.roof.mast[1]} x2={model.roof.mast[2]} y2={model.roof.mast[3]} />
   </g>
 </svg>
@@ -155,6 +185,9 @@
   .door { fill: color-mix(in oklab, var(--s-working) 55%, var(--win-off)); stroke: var(--edge); stroke-width: .5; }
   .slat { stroke: color-mix(in oklab, var(--shutter) 70%, var(--shade)); stroke-width: 1; }
   .mast { stroke: var(--muted); stroke-width: 1; }
+  .queue-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .55; }
+  .more-chip rect { fill: var(--sign-bg); stroke: var(--panel); stroke-width: 1; }
+  .more-chip text { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; fill: var(--sign-fg); text-anchor: middle; }
 
   .floor { cursor: pointer; outline: none; }
   .outline { fill: transparent; stroke: transparent; stroke-width: 2; pointer-events: none; }

@@ -430,7 +430,7 @@ export function buildScene(
   return {
     version: SCENE_VERSION,
     terminal: terminalOf(views, terminal.kind, terminal.reachable),
-    lobby: lobby && buildLobbySummary(lobby),
+    lobby: lobby && buildLobbySummary(lobby, views),
     floors: floors.map((f, i) => summaryOf(f, floors.length - i, seating?.get(f.key) ?? seatFloor(null, f))),
     attention: { needsYou: attentionOf(views, 'needs_you', terminal.kind), done: attentionOf(views, 'done', terminal.kind) },
   };

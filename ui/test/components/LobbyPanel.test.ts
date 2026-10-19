@@ -68,8 +68,8 @@ describe('LobbyPanel', () => {
     expect([...section('Waiting outside').querySelectorAll('.refused li')].map(text)).toEqual(['G-270 segnali a J · leonardo@example.com · 4m · slice al 84%']);
     expect([...section('Seats').querySelectorAll('li')].map(text)).toEqual(['▸ Jacopo 5h 6% · 7d 41%', 'Luca 5h 2% · 7d 86% · full', 'Pietro no fresh reading', 'Francesco 5h – · 7d 23%']);
     expect(text(section('Seats').querySelector('.turn'))).toBe('Turn → francesco@example.com');
-    expect(text(section('Power').querySelector('.gauge-text'))).toBe('34.6 / 44.7 GiB (77%) · mark 85%');
-    const paused = section('Power').querySelector('.paused button')!;
+    expect(text(section('Session memory').querySelector('.gauge-text'))).toBe('34.6 / 44.7 GiB (77%) · mark 85%');
+    const paused = section('Session memory').querySelector('.paused button')!;
     expect(text(paused)).toBe('G-256 e2e (wE:p1E)');
     click(paused);
     expect(onDesk).toHaveBeenCalledWith('S1');
@@ -177,7 +177,7 @@ describe('LobbyPanel', () => {
   });
 
   it('draws the sessions\' memory as a bar with the gate\'s mark and the watchdog\'s', () => {
-    const power = panel().section('Power');
+    const power = panel().section('Session memory');
     expect([...power.querySelectorAll('.bar .mark')].map((m) => (m as HTMLElement).style.left)).toEqual(['75%', '85%']);
     expect((power.querySelector('.bar .fill') as HTMLElement).style.width).toBe('77%');
   });

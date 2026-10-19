@@ -3,7 +3,7 @@
  * Every string is cleaned by the server (control and bidi characters removed, length capped).
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
-import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting } from '../core/types.js';
+import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting, WaitingKind } from '../core/types.js';
 
 export const SCENE_VERSION = 8;
 
@@ -75,17 +75,36 @@ export interface SceneTerminal {
   local: number;
 }
 
+/** How many of the queue the façade stands in a line outside the doors; the rest are a group with a count. */
+export const QUEUE_MAX = 8;
+
+/** One launch in the line outside the Lobby's doors. */
+export interface QueueSlot {
+  id: string;
+  /** Cleaned. */
+  name: string;
+  kind: WaitingKind;
+  /** The colour slot of the repository its name begins with, when the building has a floor for it; null: a grey robot. */
+  slot: number | null;
+}
+
 /** What the façade says of the Lobby. */
 export interface LobbySummary {
+  /** The doorman's name, cleaned. */
+  doorman: string;
   /** Launches the gate turned away. */
   refused: number;
   /** Tasks with a brief written, waiting for a seat and a go. */
   ready: number;
   seatsFull: number;
-  /** Used memory as a percentage of the cap; null without a cap or a reading. */
-  powerPct: number | null;
+  /** The sessions' memory against its cap, with the percentages the gate and the watchdog act at; null without a cap or a reading. */
+  memory: { pct: number; gatePct: number | null; warnPct: number } | null;
   held: boolean;
   paused: number;
+  /** The first QUEUE_MAX of the queue: the refused first, then the ready in the order the gatekeeper gave. */
+  queue: QueueSlot[];
+  /** How many more wait beyond them. */
+  queueMore: number;
   updatedAt: number;
 }
 

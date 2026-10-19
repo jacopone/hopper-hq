@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
 import Facade from '../../components/Facade.svelte';
 import source from '../../components/Facade.svelte?raw';
+import type { LobbySummary } from '../../../src/scene/types';
 import { CHECKOUT, DOCS, NOW, ORDERS, makeScene } from '../helpers/fixtures';
 import { cleanup, render, text } from '../helpers/render';
 
@@ -15,14 +16,31 @@ function facade(floors = makeScene().floors, selected: string | null = null) {
   return { target, onFloor, onDesk, floor };
 }
 
+/** The Lobby's summary with a queue of eight and three more: one refused, the rest ready, the first ready one in a repository's colour. */
+const QUEUE: LobbySummary = {
+  doorman: 'Gordon',
+  refused: 1,
+  ready: 10,
+  seatsFull: 1,
+  memory: { pct: 30, gatePct: 75, warnPct: 85 },
+  held: false,
+  paused: 0,
+  queue: [
+    { id: 'G-1', name: 'G-1 turned away', kind: 'refused', slot: null },
+    ...Array.from({ length: 7 }, (_, i) => ({ id: `G-${10 + i}`, name: `G-${10 + i} ready`, kind: 'ready' as const, slot: i === 0 ? 3 : null })),
+  ],
+  queueMore: 3,
+  updatedAt: NOW,
+};
+
 describe('Facade', () => {
   it('makes the Lobby a button with its counts when a gatekeeper is configured, and leaves it as decor without', () => {
     const onLobby = vi.fn();
-    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { refused: 3, ready: 2, seatsFull: 1, powerPct: 75, held: true, paused: 2, updatedAt: NOW }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { doorman: 'Gordon', refused: 3, ready: 2, seatsFull: 1, memory: { pct: 75, gatePct: 75, warnPct: 85 }, held: true, paused: 2, queue: [], queueMore: 0, updatedAt: NOW }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
     const lobby = target.querySelector('g.lobby')!;
     expect(lobby.getAttribute('role')).toBe('button');
-    expect(lobby.getAttribute('aria-label')).toBe('Lobby: 3 refused, 2 ready, 1 seat full, power 75%, launches held');
-    expect([...lobby.querySelectorAll('.t-meta tspan')].map(text)).toEqual(['3 refused', '2 ready', '1 seat full', 'power 75%', 'launches held']);
+    expect(lobby.getAttribute('aria-label')).toBe('Lobby: 3 refused, 2 ready, 1 seat full, session memory 75%, launches held');
+    expect([...lobby.querySelectorAll('.t-meta tspan')].map(text)).toEqual(['3 refused', '2 ready', '1 seat full', 'session memory 75%', 'launches held']);
     // Only the refusals are red: tasks that are ready and wait for a go are not an alarm.
     const [refused, ready] = [...lobby.querySelectorAll('.t-meta tspan')].map((t) => t.getAttribute('class') ?? '');
     expect(refused).not.toBe(ready);
@@ -31,6 +49,69 @@ describe('Facade', () => {
     cleanup();
     const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
     expect(plain.querySelector('g.lobby')!.getAttribute('role')).toBeNull();
+  });
+
+  it('draws the queue as micro-robots outside the doors: the refused with the needs badge, the ready with the clock, a group with its count beyond, the doorman at the door', () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const bots = [...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')];
+    expect(bots).toHaveLength(8);
+    expect(bots.filter((b) => b.classList.contains('badge-needs'))).toHaveLength(1);
+    expect(bots.filter((b) => b.classList.contains('badge-clock'))).toHaveLength(7);
+    expect(bots[0]!.classList.contains('badge-needs')).toBe(true);
+    // The body is the repository's slot when the queue names one, grey when not.
+    expect(bots[1]!.classList.contains('repo-3')).toBe(true);
+    expect([...bots[2]!.classList].some((c) => c.startsWith('repo-'))).toBe(false);
+    expect(bots.map((b) => text(b.querySelector('title')))).toEqual(['G-1 turned away', 'G-10 ready', 'G-11 ready', 'G-12 ready', 'G-13 ready', 'G-14 ready', 'G-15 ready', 'G-16 ready']);
+    expect(target.querySelectorAll('g.lobby .queue .bot.group')).toHaveLength(3);
+    expect(text(target.querySelector('g.lobby .queue .more-chip text'))).toBe('+3');
+    expect(text(target.querySelector('g.lobby .queue .more-chip title'))).toBe('3 more waiting');
+    const doorman = target.querySelector('g.lobby .queue .bot.doorman')!;
+    expect(text(doorman.querySelector('title'))).toBe('Gordon, at the door');
+    expect(doorman.querySelector('.hat')).not.toBeNull();
+  });
+
+  it('draws no group when everything fits in the line, and the doorman still stands at the door with nobody waiting', () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: QUEUE.queue.slice(0, 2), queueMore: 0, refused: 1, ready: 1 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')).toHaveLength(2);
+    expect(target.querySelector('.more-chip')).toBeNull();
+    cleanup();
+    const empty = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: [], queueMore: 0, refused: 0, ready: 0 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(empty.querySelectorAll('g.lobby .queue .bot:not(.doorman)')).toHaveLength(0);
+    expect(empty.querySelector('g.lobby .queue .bot.doorman')).not.toBeNull();
+  });
+
+  it('draws the sessions\' memory as a tank on the roof: its level, the gate\'s line and the watchdog\'s, turning amber and red past them', () => {
+    const tank = (memory: LobbySummary['memory']) => {
+      const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, memory }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+      const t = target.querySelector('g.roof .tank');
+      return { target, t };
+    };
+    const quiet = tank({ pct: 30, gatePct: 75, warnPct: 85 });
+    expect(quiet.t!.getAttribute('data-level')).toBe('30');
+    expect(text(quiet.t!.querySelector('title'))).toBe('Session memory 30%');
+    const tone = (el: Element | null | undefined) => ['warn', 'gate'].find((c) => el?.classList.contains(c)) ?? '';
+    expect([...quiet.t!.querySelectorAll('.mark')].map(tone)).toEqual(['gate', 'warn']);
+    expect(tone(quiet.t!.querySelector('.water'))).toBe('');
+    cleanup();
+    expect(tone(tank({ pct: 80, gatePct: 75, warnPct: 85 }).t!.querySelector('.water'))).toBe('gate');
+    cleanup();
+    expect(tone(tank({ pct: 90, gatePct: 75, warnPct: 85 }).t!.querySelector('.water'))).toBe('warn');
+    cleanup();
+    // No gate mark when the gatekeeper names none; no tank without a cap.
+    expect([...tank({ pct: 30, gatePct: null, warnPct: 85 }).t!.querySelectorAll('.mark')].map(tone)).toEqual(['warn']);
+    cleanup();
+    expect(tank(null).t).toBeNull();
+  });
+
+  it('draws nothing of the queue or the tank without a gatekeeper, and a click on a robot opens the Lobby', () => {
+    const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(plain.querySelector('.queue')).toBeNull();
+    expect(plain.querySelector('.tank')).toBeNull();
+    cleanup();
+    const onLobby = vi.fn();
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    target.querySelector('g.lobby .queue .bot')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onLobby).toHaveBeenCalledTimes(1);
   });
 
   it('draws one floor button per floor, bottom-up, each named for a screen reader', () => {

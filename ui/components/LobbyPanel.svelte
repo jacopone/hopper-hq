@@ -223,7 +223,7 @@
     {#if lobby.turnTo}<p class="turn">Turn → {lobby.turnTo}</p>{/if}
   </section>
   <section>
-    <h3 class="p-h3">Power</h3>
+    <h3 class="p-h3">Session memory</h3>
     {#if lobby.power}
       <Bar pct={powerPct} marks={powerMarks} over={powerPct !== null && powerPct >= lobby.power.warnPct} />
       <p class="gauge-text">{gauge(lobby.power)}</p>
