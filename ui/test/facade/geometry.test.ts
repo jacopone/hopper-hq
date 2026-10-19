@@ -20,7 +20,7 @@ function everyPoint(m: FacadeModel): Array<[number, number]> {
 
 function floorWith(n: number, overrides: Partial<FloorSummary> = {}): FloorSummary {
   const f = makeScene().floors[0]!;
-  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const })), ...overrides };
+  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const, task: null })), ...overrides };
 }
 
 describe('façade geometry', () => {

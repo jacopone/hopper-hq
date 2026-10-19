@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { FEATURE_SLOTS, fmix32, fnv1a32, REPO_SLOTS, slotOf } from '../../src/scene/palette.js';
+import { FEATURE_SLOTS, fmix32, fnv1a32, ORG_LABEL, ORG_LETTER, ORGS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from '../../src/scene/palette.js';
 
 describe('fnv1a32', () => {
   it('matches the published 32-bit FNV-1a vectors', () => {
@@ -47,5 +47,39 @@ describe('slotOf', () => {
   it('pins the demo repos and features', () => {
     expect(['/demo/orders-api', '/demo/payments-svc', '/demo/search-svc', '/demo/storefront-web'].map((r) => slotOf(r, REPO_SLOTS))).toEqual([6, 0, 1, 2]);
     expect(['checkout-v2', 'search-ranking'].map((f) => slotOf(f, FEATURE_SLOTS))).toEqual([4, 1]);
+  });
+});
+
+describe('organisations', () => {
+  it("takes an account's organisation from its email's domain: the company's, the farm's, a public provider's (personal), any other", () => {
+    expect(orgOfAccount('leonardo.davinci@amatino.ai')).toBe('amatino');
+    expect(orgOfAccount('Jacopo@Amatino.AI')).toBe('amatino');
+    expect(orgOfAccount('someone@mail.amatino.ai')).toBe('amatino');
+    expect(orgOfAccount('jacopo@tenutalarnianone.com')).toBe('tenuta');
+    for (const d of ['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'icloud.com', 'proton.me', 'yahoo.com']) expect(orgOfAccount(`j@${d}`)).toBe('personal');
+    expect(orgOfAccount('x@example.org')).toBe('other');
+    // A look-alike is not the company's.
+    expect(orgOfAccount('x@notamatino.ai')).toBe('other');
+    expect(orgOfAccount('x@amatino.ai.evil.com')).toBe('other');
+  });
+
+  it('has none for what is not an email: a config directory\'s label, an empty string, null', () => {
+    for (const a of ['home', '', '  ', null, undefined, '@amatino.ai', 'a@', 'a@@b']) expect(orgOfAccount(a)).toBeNull();
+  });
+
+  it('names each organisation in words and by one letter', () => {
+    expect(ORGS.map((o) => [o, ORG_LETTER[o], ORG_LABEL[o]])).toEqual([
+      ['amatino', 'A', 'Amatino'],
+      ['tenuta', 'T', 'Tenuta Larnianone'],
+      ['personal', 'P', 'Personal'],
+      ['other', '?', 'Another organisation'],
+    ]);
+  });
+
+  it("takes a task's area (Gordon's registry) as the same three organisations", () => {
+    expect(orgOfArea('amatino')).toBe('amatino');
+    expect(orgOfArea('tenuta')).toBe('tenuta');
+    expect(orgOfArea('personali')).toBe('personal');
+    for (const a of ['elsewhere', '', null, undefined]) expect(orgOfArea(a)).toBeNull();
   });
 });

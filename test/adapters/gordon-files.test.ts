@@ -54,8 +54,8 @@ describe('parseLobbyFile', () => {
       at: Date.parse('2026-10-16T14:02:11+02:00'),
     });
     expect(l.queue).toEqual([
-      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" }, kind: 'refused' },
-      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null, kind: 'refused' },
+      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" }, kind: 'refused', area: null, repo: null },
+      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null, kind: 'refused', area: null, repo: null },
     ]);
     expect(l.working).toBe(6);
   });
@@ -77,6 +77,17 @@ describe('parseLobbyFile', () => {
       ],
     }))!;
     expect(l.queue.map((w) => [w.id, w.kind])).toEqual([['G-1', 'refused'], ['G-3', 'ready'], ['G-2', 'ready'], ['G-4', 'refused'], ['G-5', 'refused']]);
+  });
+
+  it("reads the area and the repository the orchestrator gives a waiting task, and none when it gives none or something that is not text", () => {
+    const l = parseLobbyFile(JSON.stringify({
+      waiting: [
+        { id: 'G-1', name: 'a', kind: 'pronta', area: 'tenuta', repo: 'nixos' },
+        { id: 'G-2', name: 'b', kind: 'pronta' },
+        { id: 'G-3', name: 'c', kind: 'pronta', area: 7, repo: ['x'] },
+      ],
+    }))!;
+    expect(l.queue.map((w) => [w.id, w.area, w.repo])).toEqual([['G-1', 'tenuta', 'nixos'], ['G-2', null, null], ['G-3', null, null]]);
   });
 
   it("reads the machine as the doorman measured it, and the capacity plan line; what is not a number, or a count of zero, is null", () => {

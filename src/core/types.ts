@@ -55,6 +55,10 @@ export interface Waiting {
   since: number;
   reason: GateReason | null;
   kind: WaitingKind;
+  /** The orchestrator's area for the task ('amatino', 'tenuta', 'personali'); null when it names none. */
+  area: string | null;
+  /** The orchestrator's repository for it; null when it names none. */
+  repo: string | null;
 }
 
 /** Where the gate refuses; the gatekeeper's own rules, so that a gauge can draw them. */

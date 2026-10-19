@@ -7,7 +7,7 @@ import type { Lobby, WorkflowRun } from '../core/types.js';
 import { liveRun } from '../core/reducer.js';
 import { buildFloors, byCodeUnit, floorKeyOf, islandKeyOf, repoLabels, repoRootOf, type Floor, type SessionView } from '../core/view.js';
 import { INTERNS_MAX, layoutPlan, LOUNGE_SEATS, MEETING_AGENTS_MAX, POD_DESKS, RUNS_SHOWN, UNSEATED_MAX } from './layout.js';
-import { FEATURE_SLOTS, REPO_SLOTS, slotOf } from './palette.js';
+import { FEATURE_SLOTS, orgOfAccount, REPO_SLOTS, slotOf } from './palette.js';
 import { CREW_PREFIX, roomRunsOf, seatFloor, type RoomRun, type Seating } from './seating.js';
 import { buildLobbySummary } from './lobby.js';
 import { capKey, cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
@@ -204,10 +204,11 @@ function lookOf(root: string, feature: string | null): MeetingRoom['look'] {
   return { body: slotOf(root, REPO_SLOTS), tie: feature === null ? null : slotOf(feature, FEATURE_SLOTS) };
 }
 
-function robotOf(state: ShownState, root: string, feature: string | null): Robot | null {
+/** The tie is the feature's colour; a session with no feature wears its task's, so that a task is one colour on every floor. */
+function robotOf(state: ShownState, root: string, feature: string | null, task: string | null, account: string | null): Robot | null {
   const look = ROBOT[state];
   if (!look) return null;
-  return { pose: look.pose, badge: look.badge, ...lookOf(root, feature) };
+  return { pose: look.pose, badge: look.badge, ...lookOf(root, feature ?? task), org: orgOfAccount(account) };
 }
 
 /**
@@ -220,9 +221,9 @@ function summaryOf(floor: Floor, number: number, seating: Seating): FloorSummary
   const lit = new Set<string>();
   const windows = seating.desks.map((id): FacadeWindow => {
     const v = id === null || lit.has(id) ? undefined : on.get(id);
-    if (!v) return { sessionId: null, state: null };
+    if (!v) return { sessionId: null, state: null, task: null };
     lit.add(v.id);
-    return { sessionId: idOf(v), state: v.effectiveState as ShownState };
+    return { sessionId: idOf(v), state: v.effectiveState as ShownState, task: cleanOrNull(v.task, 64) };
   });
   const counts: Partial<Record<ShownState, number>> = {};
   for (const state of SHOWN_STATES) {
@@ -270,9 +271,10 @@ function occupantOf(v: SessionView, label: (v: SessionView) => string, terminal:
     location: v.location,
     account: cleanOrNull(v.account),
     task: cleanOrNull(v.task, 64),
+    org: orgOfAccount(v.account),
     pane: cleanOrNull(v.tmuxPane),
     focusable: focusableOf(v, terminal),
-    robot: robotOf(state, repoRootOf(v), v.feature),
+    robot: robotOf(state, repoRootOf(v), v.feature, cleanOrNull(v.task, 64), v.account),
     at,
     checkout: checkoutOf(v, label),
   };

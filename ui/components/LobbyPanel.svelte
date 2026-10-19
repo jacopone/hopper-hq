@@ -1,15 +1,18 @@
 <script lang="ts">
+  import { ORG_LABEL, ORG_LETTER } from '../../src/scene/palette';
   import { formatAgo } from '../../src/scene/text';
-  import type { LobbyDetail, PausedSession } from '../../src/scene/types';
+  import type { LobbyDetail, PausedSession, ShownState, TaskSession } from '../../src/scene/types';
   import { singleClick } from '../lib/click';
   import { plural } from '../lib/words';
   import Bar from './Bar.svelte';
+  import Bot from './Bot.svelte';
 
   /**
-   * The gatekeeper's Lobby drawn and in words: the gate's last verdict, the room left for sessions as pips, the launches
-   * waiting outside (turned away, and ready for a seat), the machine as gauges against the gate's limits, the seats with
-   * their two allowances as bars, the sessions' memory against its cap with the sessions the watchdog paused. It is also
-   * what a browser without WebGL gets of the Lobby.
+   * The gatekeeper's Lobby drawn and in words: the gate's last verdict, the room left for sessions as pips, the board of
+   * tasks (waiting outside, turned away or ready for a seat; and in the building, each with its sessions as robots in its
+   * tie and its organisation's lanyard), the machine as gauges against the gate's limits, the seats with their two
+   * allowances as bars and the chip of their organisation, the sessions' memory against its cap with the sessions the
+   * watchdog paused. It is also what a browser without WebGL gets of the Lobby.
    */
   interface Props {
     /** undefined while loading, null when no gatekeeper is configured. */
@@ -25,8 +28,17 @@
   const pct = (used: number, max: number) => Math.round((used / max) * 100);
   /** The ready tasks beyond this many are counted, and a button opens them. */
   const READY_SHOWN = 8;
-  const refused = $derived(lobby ? lobby.queue.filter((w) => w.kind === 'refused') : []);
-  const ready = $derived(lobby ? lobby.queue.filter((w) => w.kind === 'ready') : []);
+  const refused = $derived(lobby ? lobby.tasks.filter((t) => t.where === 'refused') : []);
+  const ready = $derived(lobby ? lobby.tasks.filter((t) => t.where === 'waiting') : []);
+  const live = $derived(lobby ? lobby.tasks.filter((t) => t.where === 'live') : []);
+  /** A session's badge on its robot: the floors' own, for the two states that call for one. */
+  const badgeOf = (state: ShownState): 'needs' | 'clock' | null => (state === 'needs_you' ? 'needs' : state === 'no_signal' ? 'clock' : null);
+  const ROBOT_STEP = 26;
+  function pressDesk(e: KeyboardEvent, s: TaskSession): void {
+    if (e.key !== 'Enter' && e.key !== ' ') return;
+    e.preventDefault();
+    onDesk(s.sessionId);
+  }
   let allReady = $state(false);
   const readyShown = $derived(allReady ? ready : ready.slice(0, READY_SHOWN));
   const sub = $derived.by(() => {
@@ -161,13 +173,16 @@
   </section>
   <section>
     <h3 class="p-h3">Waiting outside</h3>
-    {#if lobby.queue.length > 0}
+    {#if refused.length + ready.length > 0}
       {#if refused.length > 0}
         <div class="refused">
           <h4>Turned away · {refused.length}</h4>
           <ul class="list">
-            {#each refused as w (w.id)}
-              <li>{w.name}{w.account ? ` · ${w.account}` : ''} · {formatAgo(now - w.since)}{w.reason ? ` · ${w.reason.text}` : ''}</li>
+            {#each refused as t (t.id)}
+              <li class="row">
+                {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}<i class="swatch tie-{t.tie}"></i>
+                <span>{t.title ?? t.id}{t.account ? ` · ${t.account}` : ''}{t.since !== null ? ` · ${formatAgo(now - t.since)}` : ''}{t.reason ? ` · ${t.reason}` : ''}</span>
+              </li>
             {/each}
           </ul>
         </div>
@@ -176,8 +191,11 @@
         <div class="ready">
           <h4>Ready, waiting for a seat and a go · {ready.length}</h4>
           <ul class="list">
-            {#each readyShown as w (w.id)}
-              <li>{w.name} · {formatAgo(now - w.since)}</li>
+            {#each readyShown as t (t.id)}
+              <li class="row">
+                {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}<i class="swatch tie-{t.tie}"></i>
+                <span>{t.title ?? t.id}{t.since !== null ? ` · ${formatAgo(now - t.since)}` : ''}</span>
+              </li>
             {/each}
           </ul>
           {#if ready.length > READY_SHOWN}
@@ -187,6 +205,31 @@
       {/if}
     {:else}
       <p class="p-note">Nobody is waiting outside.</p>
+    {/if}
+  </section>
+  <section>
+    <h3 class="p-h3">In the building</h3>
+    {#if live.length > 0}
+      <div class="cards">
+        {#each live as t (t.id)}
+          <div class="card">
+            {#if t.org}<i class="stripe org-{t.org}" title={ORG_LABEL[t.org]}></i>{/if}
+            <div class="card-body">
+              <p class="card-head"><i class="swatch tie-{t.tie}"></i><b>{t.id}</b>{t.title ? ` ${t.title}` : ''}</p>
+              <p class="card-count">{plural(t.sessions.length, 'session', 'sessions')}{t.subagents > 0 ? ` · ${plural(t.subagents, 'subagent', 'subagents')}` : ''}</p>
+              <svg class="robots" viewBox="0 0 {ROBOT_STEP * t.sessions.length + 8} 58" width={ROBOT_STEP * t.sessions.length + 8} height="58" role="group" aria-label="Sessions of {t.id}">
+                {#each t.sessions as s, i (s.sessionId)}
+                  <g class="pick" role="button" tabindex="0" aria-label={s.name} onclick={singleClick(() => onDesk(s.sessionId))} onkeydown={(e) => pressDesk(e, s)}>
+                    <Bot x={18 + i * ROBOT_STEP} y={54} u={40} slot={s.body} tie={t.tie} org={s.org} badge={badgeOf(s.state)} title={s.name} />
+                  </g>
+                {/each}
+              </svg>
+            </div>
+          </div>
+        {/each}
+      </div>
+    {:else}
+      <p class="p-note">No task has a session in the building.</p>
     {/if}
   </section>
   <section>
@@ -212,7 +255,7 @@
     <ul class="list seats">
       {#each lobby.seats as s (s.account)}
         <li class:full={s.full} class:stale={s.stale} class:current={s.current}>
-          <span>{s.current ? '▸ ' : ''}{seatLine(s)}</span>
+          <span>{s.current ? '▸ ' : ''}{#if s.org}<i class="chip org-{s.org}" title={ORG_LABEL[s.org]} data-letter={ORG_LETTER[s.org]}></i>{/if}{seatLine(s)}</span>
           <span class="seat-bars">
             <Bar pct={s.session ? s.session.usedPct : null} over={s.session !== null && s.session.usedPct >= lobby.seatLimitPct} stale={s.stale} marks={[{ at: lobby.seatLimitPct, label: `full at ${lobby.seatLimitPct}%` }]} />
             <Bar pct={s.week ? s.week.usedPct : null} over={s.week !== null && s.week.usedPct >= lobby.seatLimitPct} stale={s.stale} marks={[{ at: lobby.seatLimitPct, label: `full at ${lobby.seatLimitPct}%` }]} />
@@ -263,6 +306,33 @@
   .refused li { padding-left: 8px; border-left: 3px solid var(--s-needs); }
   .ready li { padding-left: 8px; border-left: 3px solid var(--line); }
   .more { margin-top: 4px; }
+  .row { display: flex; gap: 6px; align-items: baseline; }
+  .row > span { min-width: 0; overflow-wrap: anywhere; }
+  .org-amatino { --org: var(--org-amatino); }
+  .org-tenuta { --org: var(--org-tenuta); }
+  .org-personal { --org: var(--org-personal); }
+  .org-other { --org: var(--org-other); }
+  .tie-0 { --tie: var(--feature-0); }
+  .tie-1 { --tie: var(--feature-1); }
+  .tie-2 { --tie: var(--feature-2); }
+  .tie-3 { --tie: var(--feature-3); }
+  .tie-4 { --tie: var(--feature-4); }
+  .tie-5 { --tie: var(--feature-5); }
+  .tie-6 { --tie: var(--feature-6); }
+  .tie-7 { --tie: var(--feature-7); }
+  .swatch { flex: none; display: inline-block; width: 16px; height: 7px; border-radius: 2px; background: var(--tie, var(--feature-none)); }
+  .stripe { flex: none; align-self: stretch; display: inline-block; width: 4px; border-radius: 2px; background: var(--org, var(--org-other)); box-shadow: inset 0 0 0 1px var(--edge); }
+  .chip { display: inline-grid; place-items: center; width: 1.35em; height: 1.35em; margin-right: .45em; border-radius: .3em; background: var(--org, var(--org-other)); box-shadow: inset 0 0 0 1px var(--edge); vertical-align: -.2em; }
+  .chip::after { content: attr(data-letter); font: 700 .78em var(--font-mono); color: #fff; }
+  .chip.org-personal::after { color: #18202b; }
+  .cards { display: grid; gap: 8px; }
+  .card { display: flex; gap: 8px; border: 1px solid var(--line); border-radius: 6px; padding: 6px 8px 4px 6px; background: var(--panel); }
+  .card-body { min-width: 0; }
+  .card-head { margin: 0; display: flex; gap: 6px; align-items: baseline; font-family: var(--font-mono); font-size: 12.5px; overflow-wrap: anywhere; }
+  .card-count { margin: 2px 0 0; font-size: 11.5px; color: var(--muted); }
+  .robots { display: block; overflow: visible; }
+  .pick { cursor: pointer; outline: none; }
+  .pick:hover :global(.body), .pick:focus-visible :global(.body) { stroke: var(--accent); stroke-width: 1.2; }
   .pips { display: flex; flex-wrap: wrap; gap: 4px; }
   .pip, .swatch { display: inline-block; width: 14px; height: 14px; border-radius: 3px; box-sizing: border-box; vertical-align: -2px; }
   .working { background: var(--s-working); }

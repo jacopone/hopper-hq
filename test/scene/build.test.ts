@@ -70,13 +70,13 @@ describe('the demo building', () => {
       [2, 'feature:search-ranking', 'search-ranking', 'feature', ['search-svc']],
       [1, 'repo:/demo/orders-api', 'orders-api', 'department', ['orders-api']],
     ]);
-    const free = { sessionId: null, state: null };
+    const free = { sessionId: null, state: null, task: null };
     expect(scene.floors[0]!.windows).toEqual([
-      { sessionId: 'demo-ps-d4', state: 'in_meeting' },
-      { sessionId: 'demo-sw-b2', state: 'done' },
-      { sessionId: 'demo-sw-a1', state: 'working' },
+      { sessionId: 'demo-ps-d4', state: 'in_meeting', task: null },
+      { sessionId: 'demo-sw-b2', state: 'done', task: null },
+      { sessionId: 'demo-sw-a1', state: 'working', task: null },
       free,
-      { sessionId: 'demo-oa-c3', state: 'needs_you' },
+      { sessionId: 'demo-oa-c3', state: 'needs_you', task: null },
       free,
       free,
       free,
@@ -88,7 +88,7 @@ describe('the demo building', () => {
   it('gives each desk of a floor\'s plan one window, in desk index order, dark where the desk is free', () => {
     scene.floors.forEach((f, i) => {
       const desks = floors[i]!.pods.flatMap((p) => p.desks);
-      expect(f.windows).toEqual(desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state } : { sessionId: null, state: null })));
+      expect(f.windows).toEqual(desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state, task: d.occupant.task } : { sessionId: null, state: null, task: null })));
     });
   });
 
@@ -134,19 +134,19 @@ describe('desks', () => {
     const body = slotOf('/w/api', REPO_SLOTS);
     const tie = slotOf('robots', FEATURE_SLOTS);
     expect(occupants(buildFloorDetail(views, 'feature:robots')!).map((d) => [d.state, d.robot])).toEqual([
-      ['working', { pose: 'typing', badge: 'typing', body, tie }],
-      ['needs_you', { pose: 'waving', badge: 'needs', body, tie }],
-      ['done', { pose: 'holding', badge: 'done', body, tie }],
-      ['in_meeting', { pose: 'still', badge: 'meeting', body, tie }],
-      ['no_signal', { pose: 'still', badge: 'clock', body, tie }],
-      ['idle', { pose: 'resting', badge: null, body, tie }],
+      ['working', { pose: 'typing', badge: 'typing', body, tie, org: null }],
+      ['needs_you', { pose: 'waving', badge: 'needs', body, tie, org: null }],
+      ['done', { pose: 'holding', badge: 'done', body, tie, org: null }],
+      ['in_meeting', { pose: 'still', badge: 'meeting', body, tie, org: null }],
+      ['no_signal', { pose: 'still', badge: 'clock', body, tie, org: null }],
+      ['idle', { pose: 'resting', badge: null, body, tie, org: null }],
       ['dormant', null],
     ]);
   });
 
   it('gives robots on a department floor no tie', () => {
     const desk = occupants(buildFloorDetail([view('a', ws('/w/api', 'main'), 'working')], 'repo:/w/api')!)[0]!;
-    expect(desk.robot).toEqual({ pose: 'typing', badge: 'typing', body: slotOf('/w/api', REPO_SLOTS), tie: null });
+    expect(desk.robot).toEqual({ pose: 'typing', badge: 'typing', body: slotOf('/w/api', REPO_SLOTS), tie: null, org: null });
   });
 
   it('tells same-named repositories apart on a floor, and colours each by its root on every floor', () => {
@@ -228,6 +228,32 @@ describe('desks', () => {
     expect(under('tmux')).toEqual([['c', false], ['h', false], ['n', false], ['t', true]]);
     expect(under('herdr')).toEqual([['c', false], ['h', true], ['n', false], ['t', false]]);
     expect(buildFloorDetail(views, 'repo:/w/api', undefined, undefined, 'herdr')!.terminal).toBe('herdr');
+  });
+
+  it("colours a session's tie with its task when it has no feature, keeps the feature's colour when it has one, and gives its robot its account's organisation", () => {
+    const views = [
+      view('a', ws('/w/api', 'main'), 'working', { task: 'G-268', account: 'leonardo@amatino.ai' }),
+      view('b', ws('/w/api', 'main'), 'working', { task: 'G-268', account: 'jacopo@tenutalarnianone.com' }),
+      view('c', ws('/w/api', 'main'), 'working', { account: 'j@gmail.com' }),
+      view('d', ws('/w/api', 'main'), 'working', { account: 'home' }),
+      view('e', ws('/w/api', 'feat/CHK-9'), 'working', { task: 'G-300' }),
+    ];
+    const { floors } = render(views);
+    const robots = Object.fromEntries(floors.flatMap((f) => (f ? occupants(f) : [])).map((o) => [o.sessionId, o.robot!]));
+    expect([robots.a!.tie, robots.b!.tie]).toEqual([slotOf('G-268', FEATURE_SLOTS), slotOf('G-268', FEATURE_SLOTS)]);
+    expect([robots.c!.tie, robots.d!.tie]).toEqual([null, null]);
+    expect(robots.e!.tie).toBe(slotOf('CHK-9', FEATURE_SLOTS));
+    expect([robots.a!.org, robots.b!.org, robots.c!.org, robots.d!.org]).toEqual(['amatino', 'tenuta', 'personal', null]);
+    const orgs = Object.fromEntries(floors.flatMap((f) => (f ? occupants(f) : [])).map((o) => [o.sessionId, o.org]));
+    expect(orgs).toEqual({ a: 'amatino', b: 'tenuta', c: 'personal', d: null, e: null });
+  });
+
+  it("names the task of each window of the façade, so that a task's desks can be found across floors", () => {
+    const views = [view('a', ws('/w/api', 'main'), 'working', { task: 'G-268' }), view('b', ws('/w/api', 'main'), 'working'), view('c', ws('/w/web', 'main'), 'done', { task: 'G-268' })];
+    const { scene } = render(views);
+    const windows = scene.floors.flatMap((f) => f.windows).filter((w) => w.sessionId !== null);
+    expect(windows.map((w) => w.task ?? '-').sort()).toEqual(['-', 'G-268', 'G-268']);
+    expect(scene.floors.flatMap((f) => f.windows).filter((w) => w.sessionId === null).every((w) => w.task === null)).toBe(true);
   });
 
   it('carries a session\'s task to its desk and its attention entry', () => {
@@ -405,10 +431,10 @@ describe('the plan', () => {
     ];
     const seating = new Map([['repo:/w/api', seated([null, null, 'd', 's'])]]);
     const summary = buildScene(views, undefined, seating).floors[0]!;
-    const free = { sessionId: null, state: null };
+    const free = { sessionId: null, state: null, task: null };
     expect([summary.counts, summary.windows]).toEqual([
       { working: 1, needs_you: 1, dormant: 1 },
-      [free, free, { sessionId: 'd', state: 'dormant' }, { sessionId: 's', state: 'working' }, free, free, free, free],
+      [free, free, { sessionId: 'd', state: 'dormant', task: null }, { sessionId: 's', state: 'working', task: null }, free, free, free, free],
     ]);
     const floor = buildFloorDetail(views, 'repo:/w/api', undefined, seating)!;
     expect([floor.counts, floor.unseated.map((o) => o.sessionId)]).toEqual([summary.counts, ['w']]);
@@ -443,8 +469,8 @@ describe('the plan', () => {
   it('lights one window for a session that a seating lists at two desks: that of its first desk', () => {
     const views = [view(sid(1), ws('/home/dev/api', 'main'), 'working')];
     const seating = new Map([['repo:/home/dev/api', seated([sid(1), null, sid(1)])]]);
-    const free = { sessionId: null, state: null };
-    expect(buildScene(views, undefined, seating).floors[0]!.windows).toEqual([{ sessionId: sid(1), state: 'working' }, ...Array(7).fill(free)]);
+    const free = { sessionId: null, state: null, task: null };
+    expect(buildScene(views, undefined, seating).floors[0]!.windows).toEqual([{ sessionId: sid(1), state: 'working', task: null }, ...Array(7).fill(free)]);
     expect(occupants(buildFloorDetail(views, 'repo:/home/dev/api', undefined, seating)!).map((o) => o.sessionId)).toEqual([sid(1)]);
   });
 });
@@ -676,9 +702,9 @@ describe('meeting rooms', () => {
       ['crew:helped', 3, { body: web, tie }],
     ]);
     expect(Object.fromEntries(occupants(floor).map((d) => [d.sessionId, [d.at, d.robot]]))).toEqual({
-      meet: [{ kind: 'room', slot: 0 }, { pose: 'still', badge: 'meeting', body: api, tie }],
-      busy: [{ kind: 'room', slot: 2 }, { pose: 'typing', badge: 'typing', body: web, tie }],
-      helped: [{ kind: 'room', slot: 3 }, { pose: 'still', badge: 'meeting', body: web, tie }],
+      meet: [{ kind: 'room', slot: 0 }, { pose: 'still', badge: 'meeting', body: api, tie, org: null }],
+      busy: [{ kind: 'room', slot: 2 }, { pose: 'typing', badge: 'typing', body: web, tie, org: null }],
+      helped: [{ kind: 'room', slot: 3 }, { pose: 'still', badge: 'meeting', body: web, tie, org: null }],
     });
   });
 

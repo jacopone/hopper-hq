@@ -6,6 +6,37 @@
 export const REPO_SLOTS = 8;
 export const FEATURE_SLOTS = 8;
 
+/** The organisations an account belongs to: the company, the farm, a person's own, any other. The theme's --org-<name> colours them. */
+export const ORGS = ['amatino', 'tenuta', 'personal', 'other'] as const;
+export type Org = (typeof ORGS)[number];
+
+/** Mail providers whose addresses are a person's own. */
+const PERSONAL_DOMAINS: ReadonlySet<string> = new Set(['gmail.com', 'googlemail.com', 'outlook.com', 'hotmail.com', 'live.com', 'icloud.com', 'me.com', 'proton.me', 'protonmail.com', 'yahoo.com']);
+
+/** One letter and a name for each organisation, for a chip and a tooltip. */
+export const ORG_LETTER: Readonly<Record<Org, string>> = { amatino: 'A', tenuta: 'T', personal: 'P', other: '?' };
+export const ORG_LABEL: Readonly<Record<Org, string>> = { amatino: 'Amatino', tenuta: 'Tenuta Larnianone', personal: 'Personal', other: 'Another organisation' };
+
+const inDomain = (domain: string, root: string): boolean => domain === root || domain.endsWith(`.${root}`);
+
+/**
+ * The organisation of an account, from its email's domain; null when the account is not an email (a config directory's
+ * label), so that nothing is guessed.
+ */
+export function orgOfAccount(account: string | null | undefined): Org | null {
+  const m = /^[^@\s]+@([^@\s]+)$/.exec((account ?? '').trim());
+  if (!m) return null;
+  const domain = m[1]!.toLowerCase();
+  if (inDomain(domain, 'amatino.ai')) return 'amatino';
+  if (inDomain(domain, 'tenutalarnianone.com')) return 'tenuta';
+  return PERSONAL_DOMAINS.has(domain) ? 'personal' : 'other';
+}
+
+/** The organisation of an orchestrator's task area ('amatino', 'tenuta', 'personali'); null for any other word. */
+export function orgOfArea(area: string | null | undefined): Org | null {
+  return area === 'amatino' ? 'amatino' : area === 'tenuta' ? 'tenuta' : area === 'personali' ? 'personal' : null;
+}
+
 /** 32-bit FNV-1a over UTF-16 code units, from the standard offset basis or another seed. */
 export function fnv1a32(text: string, seed = 0x811c9dc5): number {
   let h = seed;

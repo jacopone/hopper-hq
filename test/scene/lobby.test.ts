@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { newSession } from '../../src/core/reducer.js';
-import { slotOf, REPO_SLOTS } from '../../src/scene/palette.js';
+import { FEATURE_SLOTS, REPO_SLOTS, slotOf } from '../../src/scene/palette.js';
 import type { Lobby } from '../../src/core/types.js';
 import { toView } from '../../src/core/view.js';
 import { buildLobbyDetail, buildLobbySummary } from '../../src/scene/lobby.js';
@@ -11,9 +11,9 @@ const lobby: Lobby = {
   doorman: { name: 'Gordon' },
   gate: { go: false, text: 'ASPETTA: slice al 84%;\u202e', reasons: [{ kind: 'slice', text: 'slice al 84%' }], at: NOW - 1000 },
   queue: [
-    { id: 'G-270', name: 'G-270 segnali\u0007 a J', account: 'leonardo@example.com', since: NOW - 60_000, reason: null, kind: 'refused' },
-    { id: 'G-155', name: 'G-155 rebuild', account: null, since: NOW - 3_600_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready' },
-    { id: 'G-156', name: 'G-156 sblocco', account: null, since: NOW - 3_000_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready' },
+    { id: 'G-270', name: 'G-270 segnali\u0007 a J', account: 'leonardo@example.com', since: NOW - 60_000, reason: null, kind: 'refused', area: null, repo: null },
+    { id: 'G-155', name: 'G-155 rebuild', account: null, since: NOW - 3_600_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready', area: null, repo: null },
+    { id: 'G-156', name: 'G-156 sblocco', account: null, since: NOW - 3_000_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready', area: null, repo: null },
   ],
   seats: [
     { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: NOW + 7_200_000, readAt: NOW }, current: false, full: true, stale: false, turnable: true },
@@ -43,7 +43,7 @@ describe('buildLobbySummary', () => {
   });
 
   it('lists the first places of the queue, the refused first and the ready in the order given, and counts the rest', () => {
-    const ready = Array.from({ length: 10 }, (_, i) => ({ id: `G-${200 + i}`, name: `G-${200 + i} task`, account: null, since: NOW, reason: null, kind: 'ready' as const }));
+    const ready = Array.from({ length: 10 }, (_, i) => ({ id: `G-${200 + i}`, name: `G-${200 + i} task`, account: null, since: NOW, reason: null, kind: 'ready' as const, area: null, repo: null }));
     const s = buildLobbySummary({ ...lobby, queue: [ready[0]!, lobby.queue[0]!, ...ready.slice(1)] }, views);
     expect(QUEUE_MAX).toBe(8);
     expect(s.queue).toHaveLength(8);
@@ -54,15 +54,33 @@ describe('buildLobbySummary', () => {
   it("colours a waiting task's robot with its repository's slot when its name begins with the repository, and leaves it grey otherwise", () => {
     const repoView = (root: string, repoName: string, id: string) => toView({ ...newSession(id, NOW, { ...ws, repoRoot: root, repoName, root, cwd: root }), name: id }, NOW);
     const known = [repoView('/w/nixos-config', 'nixos-config', 'R1'), repoView('/w/amatino-app', 'amatino-app', 'R2')];
-    const w = (id: string, name: string) => ({ id, name, account: null, since: NOW, reason: null, kind: 'ready' as const });
+    const w = (id: string, name: string) => ({ id, name, account: null, since: NOW, reason: null, kind: 'ready' as const, area: null, repo: null });
     const s = buildLobbySummary({ ...lobby, queue: [w('G-1', 'nixos-config: il rebuild si ferma'), w('G-2', 'app: #3247 in conflitto'), w('G-3', 'Wi-Fi del portatile'), w('G-4', 'NIXOS-CONFIG segnali')] }, known);
     expect(s.queue.map((q) => q.slot)).toEqual([slotOf('/w/nixos-config', REPO_SLOTS), slotOf('/w/amatino-app', REPO_SLOTS), null, slotOf('/w/nixos-config', REPO_SLOTS)]);
+  });
+
+  describe('the tie and the organisation of a waiting task', () => {
+    const waiting = (id: string, extra: Record<string, unknown> = {}) => ({ id, name: `${id} task`, account: null, since: NOW, reason: null, kind: 'ready' as const, area: null, repo: null, ...extra });
+    const first = (w: ReturnType<typeof waiting>) => buildLobbySummary({ ...lobby, queue: [w] }, views).queue[0]!;
+
+    it("wears its id's feature slot as its tie, the one its robot keeps when it is admitted", () => {
+      expect(first(waiting('G-155')).tie).toBe(slotOf('G-155', FEATURE_SLOTS));
+    });
+
+    it("takes its organisation from the area the registry gives it, else from the account of the profile it asked for, else none", () => {
+      expect(first(waiting('G-1', { area: 'tenuta' })).org).toBe('tenuta');
+      expect(first(waiting('G-2', { area: 'personali' })).org).toBe('personal');
+      expect(first(waiting('G-3', { account: 'leonardo@amatino.ai' })).org).toBe('amatino');
+      expect(first(waiting('G-4', { area: 'amatino', account: 'j@gmail.com' })).org).toBe('amatino');
+      expect(first(waiting('G-5')).org).toBeNull();
+      expect(first(waiting('G-6', { account: 'leonardo' })).org).toBeNull();
+    });
   });
 
   describe('the colour of a waiting task', () => {
     const repoView = (root: string, repoName: string, id: string, state: 'ended' | null = null) =>
       toView({ ...newSession(id, NOW, { ...ws, repoRoot: root, repoName, root, cwd: root }), name: id, ...(state ? { state } : {}) }, NOW);
-    const ready = (name: string) => ({ id: 'G-1', name, account: null, since: NOW, reason: null, kind: 'ready' as const });
+    const ready = (name: string) => ({ id: 'G-1', name, account: null, since: NOW, reason: null, kind: 'ready' as const, area: null, repo: null });
     const slots = (name: string, vs: ReturnType<typeof repoView>[]) => buildLobbySummary({ ...lobby, queue: [ready(name)] }, vs).queue[0]!.slot;
 
     it('is none when two repositories share the name the task begins with, whatever the order of the views', () => {
@@ -91,6 +109,11 @@ describe('buildLobbySummary', () => {
       expect(slots('crm: x', [app, crm, other])).toBe(slotOf('/w/amatino-crm', REPO_SLOTS));
       expect(slots('app: x', [app, crm, other])).toBeNull();
     });
+  });
+
+  it("gives each seat its organisation in the detail", () => {
+    const d = buildLobbyDetail({ ...lobby, seats: [{ ...lobby.seats[0]!, account: 'luca@amatino.ai' }, { ...lobby.seats[1]!, account: 'jacopo@tenutalarnianone.com' }, { ...lobby.seats[1]!, account: 'someone' }] }, views, NOW);
+    expect(d.seats.map((s) => s.org)).toEqual(['amatino', 'tenuta', null]);
   });
 
   it('keeps the memory percentage within 0 and 100', () => {
@@ -133,5 +156,45 @@ describe('buildLobbyDetail', () => {
       binds: 'seats',
       nextReset: { at: NOW + 7_200_000, seat: 'Luca' },
     });
+  });
+});
+
+describe("the board of Gordon's tasks", () => {
+  const repoWs = { ...ws, repoRoot: '/w/app', repoName: 'app', root: '/w/app', cwd: '/w/app' };
+  const session = (id: string, extra: Record<string, unknown> = {}) => toView({ ...newSession(id, NOW, repoWs), name: `${id} name`, ...extra }, NOW);
+  const wait = (id: string, kind: 'ready' | 'refused', extra: Record<string, unknown> = {}) => ({ id, name: `${id} waiting`, account: null, since: NOW, reason: kind === 'refused' ? { kind: 'slice' as const, text: 'slice al 84%' } : null, kind, area: null, repo: null, ...extra });
+
+  it('lists the waiting tasks in the order of the line, each with its tie, its organisation and what keeps it out', () => {
+    const d = buildLobbyDetail({ ...lobby, queue: [wait('G-9', 'ready', { area: 'tenuta' }), wait('G-8', 'refused')] }, [], NOW);
+    expect(d.tasks.map((t) => [t.id, t.where, t.org, t.reason])).toEqual([['G-8', 'refused', null, 'slice al 84%'], ['G-9', 'waiting', 'tenuta', null]]);
+    expect(d.tasks.map((t) => [t.since, t.account])).toEqual([[NOW, null], [NOW, null]]);
+    expect(d.tasks.map((t) => t.tie)).toEqual([slotOf('G-8', FEATURE_SLOTS), slotOf('G-9', FEATURE_SLOTS)]);
+  });
+
+  it("lists the tasks with a session in the building, the one with most sessions first, each session with its state, organisation and body, and the subagents running under them", () => {
+    const views = [
+      session('S1', { task: 'G-5', account: 'luca@amatino.ai', state: 'working', children: [{ id: 'c1', type: 'Explore', description: null, running: true, lastAction: null, updatedAt: NOW }] }),
+      session('S2', { task: 'G-5', account: 'jacopo@tenutalarnianone.com', state: 'idle' }),
+      session('S3', { task: 'G-7', account: 'j@gmail.com', state: 'working' }),
+      session('S4', { account: 'luca@amatino.ai', state: 'working' }),
+      session('S5', { task: 'G-6', state: 'ended' }),
+    ];
+    const live = buildLobbyDetail(lobby, views, NOW).tasks.filter((t) => t.where === 'live');
+    expect(live.map((t) => [t.id, t.sessions.length, t.subagents])).toEqual([['G-5', 2, 1], ['G-7', 1, 0]]);
+    expect(live[0]!.sessions.map((s) => [s.sessionId, s.org, s.state])).toEqual([['S1', 'amatino', 'working'], ['S2', 'tenuta', 'idle']]);
+    expect(live[0]!.sessions[0]!.body).toBe(slotOf('/w/app', REPO_SLOTS));
+    expect(live[0]!.tie).toBe(slotOf('G-5', FEATURE_SLOTS));
+    expect(live[0]!.org).toBe('amatino');
+  });
+
+  it('puts a task that waits and has a session in the building under the live ones only, once', () => {
+    const d = buildLobbyDetail({ ...lobby, queue: [wait('G-5', 'ready')] }, [session('S1', { task: 'G-5', state: 'working' })], NOW);
+    expect(d.tasks.map((t) => [t.id, t.where])).toEqual([['G-5', 'live']]);
+  });
+
+  it('cleans what it shows', () => {
+    const d = buildLobbyDetail({ ...lobby, queue: [wait('G-1\u202e', 'ready', { name: 'x\u0007y' })] }, [], NOW);
+    expect(d.tasks[0]!.id).toBe('G-1');
+    expect(d.tasks[0]!.title).toBe('xy');
   });
 });

@@ -76,6 +76,8 @@ export interface WindowShape {
   /** Null: a free desk, a dark window that leads nowhere. */
   sessionId: string | null;
   state: ShownState | null;
+  /** The orchestrator's task of the session at the desk; null when none. */
+  task: string | null;
   points: string;
   /** Someone is at the desk and the screen is on. */
   lit: boolean;
@@ -203,7 +205,7 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, wit
     const slats: Line[] = [];
     for (let i = 0; i < f.windows.length; i++) {
       const w = f.windows[i]!;
-      windows.push({ sessionId: w.sessionId, state: w.state, points: points(onFront(D, i + 0.18, i + 0.82, z0 + 13, z0 + FLOOR_H - 6)), lit: w.state !== null && LIT.has(w.state) });
+      windows.push({ sessionId: w.sessionId, state: w.state, task: w.task, points: points(onFront(D, i + 0.18, i + 0.82, z0 + 13, z0 + FLOOR_H - 6)), lit: w.state !== null && LIT.has(w.state) });
       if (f.shutters) {
         for (let k = 1; k < 4; k++) {
           const z = z0 + 13 + (k * (FLOOR_H - 19)) / 4;

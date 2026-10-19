@@ -1,5 +1,6 @@
 <script lang="ts">
   import { cleanText } from '../../src/scene/text';
+  import { FEATURE_SLOTS, slotOf } from '../../src/scene/palette';
   import type { FloorSummary, LobbySummary } from '../../src/scene/types';
   import { MIN_SCALE, NAME_MAX, facadeOf, type Box, type GateModel, type Label } from '../facade/geometry';
   import { STATES, floorLabel, floorMeta, lobbyLabel, lobbyMeta, type Meta } from '../lib/words';
@@ -38,6 +39,16 @@
   const chipWidth = (n: number) => 10 + 6.5 * `+${n}`.length;
   const byKey = $derived(new Map(floors.map((f) => [f.key, f])));
 
+  /** The task whose desk the pointer is over: its desks are ringed on every floor and joined by a thread. */
+  let hoverTask: string | null = $state(null);
+  const ringed = $derived(hoverTask === null ? [] : model.floors.flatMap((f) => f.windows.filter((w) => w.sessionId !== null && w.task === hoverTask)));
+  const hoverTie = $derived(hoverTask === null ? 0 : slotOf(hoverTask, FEATURE_SLOTS));
+  const centre = (points: string): [number, number] => {
+    const ps = points.split(' ').map((p) => p.split(',').map(Number) as [number, number]);
+    return [ps.reduce((a, p) => a + p[0], 0) / ps.length, ps.reduce((a, p) => a + p[1], 0) / ps.length];
+  };
+  const thread = $derived(ringed.length < 2 ? null : ringed.map((w) => centre(w.points).map((n) => Math.round(n * 10) / 10).join(',')).join(' '));
+
   function pick(e: MouseEvent, key: string): void {
     const id = (e.target as Element | null)?.closest('[data-desk]')?.getAttribute('data-desk');
     if (id) onDesk(key, id);
@@ -65,7 +76,7 @@
     <line class="queue-line" x1={gate.line[0]} y1={gate.line[1]} x2={gate.line[2]} y2={gate.line[3]} />
     {#each l.queue as w, i (i)}
       {#if gate.slots[i]}
-        <Bot x={gate.slots[i]![0]} y={gate.slots[i]![1]} slot={w.slot} badge={w.kind === 'refused' ? 'needs' : 'clock'} title={w.name} />
+        <Bot x={gate.slots[i]![0]} y={gate.slots[i]![1]} slot={w.slot} tie={w.tie} org={w.org} folder badge={w.kind === 'refused' ? 'needs' : 'clock'} title={w.name} />
       {/if}
     {/each}
     {#if l.queueMore > 0}
@@ -78,7 +89,7 @@
         <text x="0" y="3.6">+{l.queueMore}</text>
       </g>
     {/if}
-    <Bot x={gate.doorman[0]} y={gate.doorman[1]} kind="doorman" hat title="{l.doorman}, at the door" />
+    <Bot x={gate.doorman[0]} y={gate.doorman[1]} kind="doorman" title="{l.doorman}, at the door" />
   </g>
 {/snippet}
 
@@ -139,7 +150,9 @@
       {@render solid(floor.wall, 'wall')}
       {#each floor.windows as w, i (i)}
         {#if w.sessionId !== null && w.state !== null}
-          <polygon class="sfill st-{w.state}" class:lit={w.lit} points={w.points} data-desk={w.sessionId}><title>{STATES[w.state].label}</title></polygon>
+          <!-- The ring of a task is a pointer's extra: the floor around the window is the button, and what a task holds is on the Lobby's board. -->
+          <!-- svelte-ignore a11y_no_static_element_interactions -->
+          <polygon class="sfill st-{w.state}" class:lit={w.lit} points={w.points} data-desk={w.sessionId} onmouseenter={() => (hoverTask = w.task)} onmouseleave={() => (hoverTask = null)}><title>{STATES[w.state].label}</title></polygon>
         {:else}
           <polygon class="sfill st-free" points={w.points} />
         {/if}
@@ -150,6 +163,12 @@
       <polygon class="outline" points={floor.outline} />
     </g>
   {/each}
+  {#if ringed.length > 0}
+    <g class="task-rings">
+      {#each ringed as w, i (i)}<polygon class={['task-ring', `tie-${hoverTie}`]} points={w.points} />{/each}
+      {#if thread}<polyline class={['task-thread', `tie-${hoverTie}`]} points={thread} />{/if}
+    </g>
+  {/if}
   <g class="roof">
     {@render solid(model.roof.slab, 'roof')}
     {#each model.roof.units as unit, i (i)}{@render solid(unit, 'unit')}{/each}
@@ -185,6 +204,16 @@
   .door { fill: color-mix(in oklab, var(--s-working) 55%, var(--win-off)); stroke: var(--edge); stroke-width: .5; }
   .slat { stroke: color-mix(in oklab, var(--shutter) 70%, var(--shade)); stroke-width: 1; }
   .mast { stroke: var(--muted); stroke-width: 1; }
+  .tie-0 { --tie: var(--feature-0); }
+  .tie-1 { --tie: var(--feature-1); }
+  .tie-2 { --tie: var(--feature-2); }
+  .tie-3 { --tie: var(--feature-3); }
+  .tie-4 { --tie: var(--feature-4); }
+  .tie-5 { --tie: var(--feature-5); }
+  .tie-6 { --tie: var(--feature-6); }
+  .tie-7 { --tie: var(--feature-7); }
+  .task-ring { fill: none; stroke: var(--tie); stroke-width: 3; stroke-linejoin: round; pointer-events: none; }
+  .task-thread { fill: none; stroke: var(--tie); stroke-width: 1.6; stroke-dasharray: 4 3; pointer-events: none; }
   .queue-line { stroke: var(--muted); stroke-width: 1; stroke-dasharray: 2 3; opacity: .55; }
   .more-chip rect { fill: var(--sign-bg); stroke: var(--panel); stroke-width: 1; }
   .more-chip text { font-family: var(--font-mono); font-size: 9.5px; font-weight: 700; fill: var(--sign-fg); text-anchor: middle; }

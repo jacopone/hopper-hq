@@ -54,7 +54,7 @@ describe('GordonProvider', () => {
     expect(out.lobbies).toHaveLength(1);
     const l = out.lobbies[0]!;
     expect(l.gate).toMatchObject({ go: false, reasons: [{ kind: 'slice' }] });
-    expect(l.queue).toEqual([{ id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: 'slice delle sessioni al 84% del tetto' }, kind: 'refused' }]);
+    expect(l.queue).toEqual([{ id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: 'slice delle sessioni al 84% del tetto' }, kind: 'refused', area: null, repo: null }]);
     // The rota first, then the rest; the owner's seat takes turns, the personal account does not.
     expect(l.seats.map((x) => [x.name, x.current, x.turnable])).toEqual([['Leonardo', false, true], ['Jacopo', true, true], ['Personale', false, false]]);
     expect(l.turnTo).toBe('leonardo@example.com');

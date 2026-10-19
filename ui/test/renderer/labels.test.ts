@@ -96,6 +96,32 @@ describe('the label layer', () => {
     expect([labels.sign('p1')!.textContent, labels.sign('p1')!.querySelector('small')]).toEqual(['orders-api', null]);
   });
 
+  it('shows the task and the organisation of a session on its tag, after its name, and in its title', () => {
+    const { root, labels } = layer();
+    const floor = makeFloor(checkoutSpecs());
+    const occupant = floor.pods.flatMap((p) => p.desks).map((d) => d.occupant).find((o) => o?.sessionId === 'oa-c3')!;
+    occupant.task = 'G-268';
+    occupant.org = 'tenuta';
+    labels.sync(floor);
+    const tag = labels.tag('oa-c3')!;
+    expect([...tag.children].map((c) => [c.className, c.textContent])).toEqual([
+      ['fv-dot', ''],
+      ['fv-name', 'oa-c3'],
+      ['fv-task', 'G-268'],
+      ['fv-org fv-org-tenuta', 'T'],
+      ['fv-note', 'needs you'],
+    ]);
+    expect(tag.title).toBe('oa-c3 · needs you · G-268 · Tenuta Larnianone');
+    // Each organisation has its colour from its token.
+    for (const o of ['amatino', 'tenuta', 'personal', 'other']) expect(rule(`.fv-org-${o}`)).toContain(`var(--org-${o}`);
+    // A change of task or organisation is shown at the next sync.
+    occupant.org = null;
+    occupant.task = null;
+    labels.sync(floor);
+    expect([...tag.children].map((c) => c.className)).toEqual(['fv-dot', 'fv-name', 'fv-note']);
+    expect(root.querySelectorAll('.fv-org')).toHaveLength(0);
+  });
+
   it('writes names, repos and branches as text, never as markup', () => {
     const { root, labels } = layer();
     const checkouts = checkoutSpecs();

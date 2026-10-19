@@ -2,9 +2,9 @@ import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
 import { repoRootOf } from '../core/view.js';
 import type { Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
 import type { SessionView } from '../core/view.js';
-import { REPO_SLOTS, slotOf } from './palette.js';
-import { cleanOrNull, cleanText } from './text.js';
-import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot } from './types.js';
+import { FEATURE_SLOTS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from './palette.js';
+import { cleanOrNull, cleanText, taskTitle } from './text.js';
+import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard } from './types.js';
 
 /**
  * The colour slot of each repository the building has a floor for (a live session works in it), by its lower-case name.
@@ -42,7 +42,14 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
   const repos = repoSlots(views);
   // The turned away stand at the head of the line; each kind keeps the gatekeeper's order.
   const line = [...l.queue.filter((w) => w.kind === 'refused'), ...l.queue.filter((w) => w.kind === 'ready')];
-  const queue: QueueSlot[] = line.slice(0, QUEUE_MAX).map((w) => ({ id: cleanText(w.id, 64), name: cleanText(w.name, 80), kind: w.kind, slot: slotOfName(w.name, repos) }));
+  const queue: QueueSlot[] = line.slice(0, QUEUE_MAX).map((w) => ({
+    id: cleanText(w.id, 64),
+    name: cleanText(w.name, 80),
+    kind: w.kind,
+    slot: slotOfName(w.name, repos),
+    tie: slotOf(cleanText(w.id, 64), FEATURE_SLOTS),
+    org: waitingOrg(w),
+  }));
   return {
     doorman: cleanText(l.doorman.name, 40),
     refused: l.queue.filter((w) => w.kind === 'refused').length,
@@ -57,6 +64,9 @@ export function buildLobbySummary(l: Lobby, views: readonly SessionView[] = []):
   };
 }
 
+/** A waiting launch's organisation: its task's area when the orchestrator names one, else the account of the profile it asked for. */
+const waitingOrg = (w: Waiting) => orgOfArea(w.area) ?? orgOfAccount(w.account);
+
 const gateOf = (g: GateVerdict | null): GateVerdict | null =>
   g && { go: g.go, text: cleanText(g.text, 400), reasons: g.reasons.map((r) => ({ kind: r.kind, text: cleanText(r.text) })), at: g.at };
 
@@ -67,6 +77,8 @@ const waitingOf = (w: Waiting): Waiting => ({
   since: w.since,
   reason: w.reason && { kind: w.reason.kind, text: cleanText(w.reason.text) },
   kind: w.kind,
+  area: cleanOrNull(w.area, 20),
+  repo: cleanOrNull(w.repo, 40),
 });
 
 const capacityDetail = (c: Capacity): Capacity => ({
@@ -75,7 +87,7 @@ const capacityDetail = (c: Capacity): Capacity => ({
   nextReset: c.nextReset && { at: c.nextReset.at, seat: cleanText(c.nextReset.seat, 40) },
 });
 
-const seatOf = (s: Seat): Seat => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40) });
+const seatOf = (s: Seat): SeatView => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40), org: orgOfAccount(s.account) });
 
 /** The paused panes, each with the live session in it when the building knows one. */
 function pausedOf(panes: readonly string[], views: readonly SessionView[]): PausedSession[] {
@@ -83,6 +95,55 @@ function pausedOf(panes: readonly string[], views: readonly SessionView[]): Paus
     const v = views.find((x) => x.effectiveState !== 'ended' && x.tmuxPane === pane);
     return { pane: cleanText(pane, 32), sessionId: v?.id ?? null, name: v ? cleanOrNull(v.name) : null };
   });
+}
+
+/**
+ * The board: the line outside (the refused first, then the ready, as the gatekeeper gave them), then the tasks that have
+ * a session in the building, the one with most sessions first. A task that waits and already has a session is only live.
+ */
+function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
+  const groups = new Map<string, SessionView[]>();
+  for (const v of views) {
+    const id = cleanOrNull(v.task, 64);
+    if (id === null || v.effectiveState === 'ended') continue;
+    groups.set(id, [...(groups.get(id) ?? []), v]);
+  }
+  const waiting = [...l.queue.filter((w) => w.kind === 'refused'), ...l.queue.filter((w) => w.kind === 'ready')]
+    .filter((w) => !groups.has(cleanText(w.id, 64)))
+    .map((w): TaskCard => ({
+      id: cleanText(w.id, 64),
+      title: cleanOrNull(w.name, 120),
+      tie: slotOf(cleanText(w.id, 64), FEATURE_SLOTS),
+      org: waitingOrg(w),
+      where: w.kind === 'refused' ? 'refused' : 'waiting',
+      reason: w.reason ? cleanText(w.reason.text) : null,
+      since: w.since,
+      account: cleanOrNull(w.account),
+      sessions: [],
+      subagents: 0,
+    }));
+  const live = [...groups]
+    .map(([id, vs]): TaskCard => ({
+      id,
+      title: taskTitle(vs[0]!),
+      tie: slotOf(id, FEATURE_SLOTS),
+      org: vs.map((v) => orgOfAccount(v.account)).find((o) => o !== null) ?? null,
+      where: 'live',
+      reason: null,
+      since: null,
+      account: null,
+      sessions: vs.map((v) => ({
+        sessionId: v.id,
+        name: cleanOrNull(v.name, 60) ?? v.id.slice(0, 8),
+        state: v.effectiveState as ShownState,
+        org: orgOfAccount(v.account),
+        body: slotOf(repoRootOf(v), REPO_SLOTS),
+        badge: null,
+      })),
+      subagents: vs.reduce((n, v) => n + v.children.filter((c) => c.running).length + v.runs.reduce((m, r) => m + r.agents.filter((a) => a.running).length, 0), 0),
+    }))
+    .sort((a, b) => b.sessions.length - a.sessions.length || (a.id < b.id ? -1 : 1));
+  return [...waiting, ...live];
 }
 
 /** The Lobby in detail, every string cleaned, the doorman's own session found by its name. */
@@ -93,6 +154,7 @@ export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = 
     doorman: { name: cleanText(l.doorman.name, 40), sessionId: doorman?.id ?? null },
     gate: gateOf(l.gate),
     queue: l.queue.map(waitingOf),
+    tasks: boardOf(l, views),
     seats: l.seats.map(seatOf),
     turnTo: cleanOrNull(l.turnTo),
     power: l.power && { ...l.power, pausedPanes: l.power.pausedPanes.map((p) => cleanText(p, 32)), paused: pausedOf(l.power.pausedPanes, views) },

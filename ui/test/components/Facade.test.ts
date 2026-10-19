@@ -2,7 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
 import Facade from '../../components/Facade.svelte';
 import source from '../../components/Facade.svelte?raw';
-import type { LobbySummary } from '../../../src/scene/types';
+import { FEATURE_SLOTS, slotOf } from '../../../src/scene/palette';
+import type { FloorSummary, LobbySummary } from '../../../src/scene/types';
 import { CHECKOUT, DOCS, NOW, ORDERS, makeScene } from '../helpers/fixtures';
 import { cleanup, render, text } from '../helpers/render';
 
@@ -26,8 +27,8 @@ const QUEUE: LobbySummary = {
   held: false,
   paused: 0,
   queue: [
-    { id: 'G-1', name: 'G-1 turned away', kind: 'refused', slot: null },
-    ...Array.from({ length: 7 }, (_, i) => ({ id: `G-${10 + i}`, name: `G-${10 + i} ready`, kind: 'ready' as const, slot: i === 0 ? 3 : null })),
+    { id: 'G-1', name: 'G-1 turned away', kind: 'refused', slot: null, tie: 4, org: 'tenuta' },
+    ...Array.from({ length: 7 }, (_, i) => ({ id: `G-${10 + i}`, name: `G-${10 + i} ready`, kind: 'ready' as const, slot: i === 0 ? 3 : null, tie: i, org: i === 0 ? ('amatino' as const) : null })),
   ],
   queueMore: 3,
   updatedAt: NOW,
@@ -67,7 +68,55 @@ describe('Facade', () => {
     expect(text(target.querySelector('g.lobby .queue .more-chip title'))).toBe('3 more waiting');
     const doorman = target.querySelector('g.lobby .queue .bot.doorman')!;
     expect(text(doorman.querySelector('title'))).toBe('Gordon, at the door');
-    expect(doorman.querySelector('.hat')).not.toBeNull();
+    // Gordon wears a cap and carries a clipboard; the hard hat is the workflow agent's.
+    expect(doorman.querySelector('.cap')).not.toBeNull();
+    expect(doorman.querySelector('.clipboard')).not.toBeNull();
+    expect(doorman.querySelector('.hat')).toBeNull();
+  });
+
+  it("dresses each robot of the line in its task's tie, its organisation's lanyard and the brief in its hand", () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const bots = [...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')];
+    expect(bots[0]!.classList.contains('tie-4')).toBe(true);
+    expect(bots[3]!.classList.contains('tie-2')).toBe(true);
+    // The lanyard: a strap and a card, in the organisation's colour; none without an organisation.
+    expect(bots[0]!.classList.contains('org-tenuta')).toBe(true);
+    expect(bots[0]!.querySelectorAll('.lanyard')).toHaveLength(2);
+    expect(bots[1]!.classList.contains('org-amatino')).toBe(true);
+    expect(bots[2]!.querySelectorAll('.lanyard')).toHaveLength(0);
+    expect([...bots[2]!.classList].some((c) => c.startsWith('org-'))).toBe(false);
+    // Every launch in the line holds its brief; the group beyond and the doorman do not.
+    expect(bots.every((b) => b.querySelector('.folder') !== null)).toBe(true);
+    expect(target.querySelector('g.lobby .queue .bot.group .folder')).toBeNull();
+  });
+
+  it("rings the desks of a task across the floors, and joins them with a thread, while one of them is hovered", () => {
+    const floors: FloorSummary[] = makeScene().floors.map((f) => ({ ...f, windows: f.windows.map((w) => ({ ...w })) }));
+    const withSession = floors.flatMap((f, fi) => f.windows.map((w, wi) => ({ w, fi, wi }))).filter(({ w }) => w.sessionId !== null);
+    const [a, b, c] = withSession;
+    a!.w.task = 'G-7';
+    b!.w.task = 'G-7';
+    c!.w.task = 'G-8';
+    const target = render(Facade, { floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const window = (x: { w: { sessionId: string | null } }) => target.querySelector(`[data-desk="${x.w.sessionId}"]`)!;
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
+    window(a!).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(2);
+    expect(target.querySelectorAll('.task-thread')).toHaveLength(1);
+    expect(target.querySelector('.task-ring')!.classList.contains(`tie-${slotOf('G-7', FEATURE_SLOTS)}`)).toBe(true);
+    // A task with one desk gets a ring and no thread.
+    window(c!).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect([target.querySelectorAll('.task-ring').length, target.querySelectorAll('.task-thread').length]).toEqual([1, 0]);
+    // Leaving a desk takes the rings away; a desk with no task rings nothing.
+    window(c!).dispatchEvent(new MouseEvent('mouseleave'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
+    const plain = withSession.find(({ w }) => w.task === null || w.task === undefined)!;
+    window(plain).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
   });
 
   it('draws no group when everything fits in the line, and the doorman still stands at the door with nobody waiting', () => {
@@ -104,7 +153,7 @@ describe('Facade', () => {
   });
 
   it('draws every place of the line even when two launches carry the same id once cleaned', () => {
-    const twin = (name: string) => ({ id: 'G-7', name, kind: 'ready' as const, slot: null });
+    const twin = (name: string) => ({ id: 'G-7', name, kind: 'ready' as const, slot: null, tie: 0, org: null });
     const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: [twin('first'), twin('second')], queueMore: 0 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
     expect([...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman) title')].map(text)).toEqual(['first', 'second']);
   });
@@ -178,7 +227,7 @@ describe('Facade', () => {
   });
 
   it('never draws the building below 80% of its size, where its text gets too small to read: the stage scrolls instead', () => {
-    const many = makeScene().floors.map((f) => ({ ...f, windows: Array.from({ length: 40 }, (_, i) => ({ sessionId: `${f.key}-${i}`, state: 'working' as const })) }));
+    const many = makeScene().floors.map((f) => ({ ...f, windows: Array.from({ length: 40 }, (_, i) => ({ sessionId: `${f.key}-${i}`, state: 'working' as const, task: null })) }));
     for (const floors of [makeScene().floors, many]) {
       const { target } = facade(floors);
       const svg = target.querySelector<SVGSVGElement>('svg.facade')!;

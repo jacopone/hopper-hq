@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LobbyPanel from '../../components/LobbyPanel.svelte';
-import type { LobbyDetail } from '../../../src/scene/types';
+import type { LobbyDetail, TaskCard } from '../../../src/scene/types';
 import { NOW } from '../helpers/fixtures';
 import { cleanup, click, render, text } from '../helpers/render';
 
@@ -11,15 +11,27 @@ const detail: LobbyDetail = {
   doorman: { name: 'Gordon', sessionId: 'G0' },
   gate: { go: false, text: 'ASPETTA: slice al 84%; ultimo avvio 40 s fa;', reasons: [{ kind: 'slice', text: 'slice al 84%' }, { kind: 'pacing', text: 'ultimo avvio 40 s fa' }], at: NOW - 12_000 },
   queue: [
-    { id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: NOW - 4 * 60_000, reason: { kind: 'slice', text: 'slice al 84%' }, kind: 'refused' },
-    { id: 'G-155', name: 'G-155 rebuild', account: null, since: NOW - 3_600_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready' },
-    { id: 'G-156', name: 'G-156 sblocco', account: null, since: NOW - 7_200_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready' },
+    { id: 'G-270', name: 'G-270 segnali a J', account: 'leonardo@example.com', since: NOW - 4 * 60_000, reason: { kind: 'slice', text: 'slice al 84%' }, kind: 'refused', area: null, repo: null },
+    { id: 'G-155', name: 'G-155 rebuild', account: null, since: NOW - 3_600_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready', area: null, repo: null },
+    { id: 'G-156', name: 'G-156 sblocco', account: null, since: NOW - 7_200_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready', area: null, repo: null },
+  ],
+  tasks: [
+    { id: 'G-270', title: 'G-270 segnali a J', tie: 4, org: 'amatino', where: 'refused', reason: 'slice al 84%', since: NOW - 4 * 60_000, account: 'leonardo@example.com', sessions: [], subagents: 0 },
+    { id: 'G-155', title: 'G-155 rebuild', tie: 1, org: 'personal', where: 'waiting', reason: null, since: NOW - 3_600_000, account: null, sessions: [], subagents: 0 },
+    { id: 'G-156', title: 'G-156 sblocco', tie: 2, org: null, where: 'waiting', reason: null, since: NOW - 7_200_000, account: null, sessions: [], subagents: 0 },
+    {
+      id: 'G-178', title: 'pr-medic-app', tie: 5, org: 'amatino', where: 'live', reason: null, since: null, account: null, subagents: 2,
+      sessions: [
+        { sessionId: 'S1', name: 'pr-medic 1', state: 'working', org: 'amatino', body: 3, badge: null },
+        { sessionId: 'S2', name: 'pr-medic 2', state: 'needs_you', org: 'tenuta', body: 3, badge: null },
+      ],
+    },
   ],
   seats: [
-    { account: 'jacopo@example.com', name: 'Jacopo', session: { usedPct: 6, resetsAt: null, readAt: NOW }, week: { usedPct: 41, resetsAt: null, readAt: NOW }, current: true, full: false, stale: false, turnable: true },
-    { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: null, readAt: NOW }, current: false, full: true, stale: false, turnable: true },
-    { account: 'pietro@example.com', name: 'Pietro', session: null, week: null, current: false, full: false, stale: true, turnable: true },
-    { account: 'francesco@example.com', name: 'Francesco', session: null, week: { usedPct: 23, resetsAt: null, readAt: NOW }, current: false, full: false, stale: false, turnable: true },
+    { account: 'jacopo@example.com', name: 'Jacopo', session: { usedPct: 6, resetsAt: null, readAt: NOW }, week: { usedPct: 41, resetsAt: null, readAt: NOW }, current: true, full: false, stale: false, turnable: true, org: 'amatino' },
+    { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: null, readAt: NOW }, current: false, full: true, stale: false, turnable: true, org: 'amatino' },
+    { account: 'pietro@example.com', name: 'Pietro', session: null, week: null, current: false, full: false, stale: true, turnable: true, org: null },
+    { account: 'francesco@example.com', name: 'Francesco', session: null, week: { usedPct: 23, resetsAt: null, readAt: NOW }, current: false, full: false, stale: false, turnable: true, org: 'tenuta' },
   ],
   turnTo: 'francesco@example.com',
   power: { usedBytes: 34.6 * 2 ** 30, maxBytes: 44.7 * 2 ** 30, warnPct: 85, held: false, pausedPanes: ['wE:p1E'], paused: [{ pane: 'wE:p1E', sessionId: 'S1', name: 'G-256 e2e' }] },
@@ -31,7 +43,7 @@ const detail: LobbyDetail = {
   updatedAt: NOW - 12_000,
 };
 
-const ready = (n: number) => Array.from({ length: n }, (_, i) => ({ id: `G-${300 + i}`, name: `G-${300 + i} task`, account: null, since: NOW - (i + 1) * 60_000, reason: null, kind: 'ready' as const }));
+const ready = (n: number): TaskCard[] => Array.from({ length: n }, (_, i) => ({ id: `G-${300 + i}`, title: `G-${300 + i} task`, tie: i % 8, org: null, where: 'waiting' as const, reason: null, since: NOW - (i + 1) * 60_000, account: null, sessions: [], subagents: 0 }));
 
 /** Mounts the panel; with no argument it shows `detail`, and `undefined` passed on purpose means loading. */
 function panel(...args: [] | [LobbyDetail | null | undefined]) {
@@ -83,8 +95,43 @@ describe('LobbyPanel', () => {
     expect([...wait.querySelectorAll('.ready li')].map(text)).toEqual(['G-155 rebuild · 1h', 'G-156 sblocco · 2h']);
   });
 
+  it("marks each waiting task with the colour of its tie and of its organisation, as colour and not as text", () => {
+    const { section } = panel();
+    const wait = section('Waiting outside');
+    const rows = [...wait.querySelectorAll('li')];
+    expect(rows.map((li) => li.querySelector('.swatch')!.classList.contains(`tie-${[4, 1, 2][rows.indexOf(li)]}`))).toEqual([true, true, true]);
+    expect(rows.map((li) => [...(li.querySelector('.stripe')?.classList ?? [])].find((c) => c.startsWith('org-')) ?? null)).toEqual(['org-amatino', 'org-personal', null]);
+    // The organisation is named for a screen reader and on hover; its letter is drawn by the style, so it is not in the row's text.
+    expect(rows[0]!.querySelector('.stripe')!.getAttribute('title')).toBe('Amatino');
+    expect(text(rows[0]!)).toBe('G-270 segnali a J · leonardo@example.com · 4m · slice al 84%');
+  });
+
+  it("shows the tasks with a session in the building as cards: the task, its sessions as robots in its tie, its subagents", () => {
+    const { section, onDesk } = panel();
+    const building = section('In the building');
+    const card = building.querySelector('.card')!;
+    expect(text(card.querySelector('.card-head'))).toBe('G-178 pr-medic-app');
+    expect(text(card.querySelector('.card-count'))).toBe('2 sessions · 2 subagents');
+    const bots = [...card.querySelectorAll('.bot')];
+    expect(bots).toHaveLength(2);
+    expect(bots.every((b) => b.classList.contains('tie-5') && b.classList.contains('repo-3'))).toBe(true);
+    expect(bots.map((b) => [...b.classList].find((c) => c.startsWith('org-')))).toEqual(['org-amatino', 'org-tenuta']);
+    expect(bots[1]!.classList.contains('badge-needs')).toBe(true);
+    // A robot is a button to its desk.
+    bots[0]!.closest('[role="button"]')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onDesk).toHaveBeenCalledWith('S1');
+    cleanup();
+    expect(text(panel({ ...detail, tasks: [] }).section('In the building').querySelector('.p-note'))).toBe('No task has a session in the building.');
+  });
+
+  it("gives each seat the chip of its organisation", () => {
+    const { section } = panel();
+    const chips = [...section('Seats').querySelectorAll('li')].map((li) => [...(li.querySelector('.chip')?.classList ?? [])].find((c) => c.startsWith('org-')) ?? null);
+    expect(chips).toEqual(['org-amatino', 'org-amatino', null, 'org-tenuta']);
+  });
+
   it('shows eight ready tasks and counts the rest, which a button opens and closes', () => {
-    const { section } = panel({ ...detail, queue: ready(11) });
+    const { section } = panel({ ...detail, tasks: ready(11) });
     const wait = section('Waiting outside');
     expect([...wait.querySelectorAll('.ready li')]).toHaveLength(8);
     const more = wait.querySelector('.ready button.more')!;
@@ -95,7 +142,7 @@ describe('LobbyPanel', () => {
     click(wait.querySelector('.ready button.more'));
     expect([...wait.querySelectorAll('.ready li')]).toHaveLength(8);
     cleanup();
-    expect(panel({ ...detail, queue: ready(8) }).section('Waiting outside').querySelector('button.more')).toBeNull();
+    expect(panel({ ...detail, tasks: ready(8) }).section('Waiting outside').querySelector('button.more')).toBeNull();
   });
 
   it("draws the capacity as one pip per place under the cap: working, free now, and held back by the seats", () => {
@@ -189,7 +236,7 @@ describe('LobbyPanel', () => {
   });
 
   it('says when the gate has not spoken, when nothing waits, and when there is no gatekeeper or the Lobby is loading', () => {
-    const { section } = panel({ ...detail, gate: null, queue: [] });
+    const { section } = panel({ ...detail, gate: null, tasks: [] });
     expect(text(section('Gate').querySelector('.p-note'))).toBe('No word from the gate.');
     expect(text(section('Waiting outside').querySelector('.p-note'))).toBe('Nobody is waiting outside.');
     cleanup();

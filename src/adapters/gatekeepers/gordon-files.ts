@@ -42,7 +42,7 @@ export function timeOf(value: unknown): number | null {
 
 export interface LobbyFile {
   gate: GateVerdict | null;
-  queue: { id: string; name: string; profile: string | null; since: number; reason: GateReason | null; kind: WaitingKind }[];
+  queue: { id: string; name: string; profile: string | null; since: number; reason: GateReason | null; kind: WaitingKind; area: string | null; repo: string | null }[];
   working: number | null;
   /** The machine as the gate measured it; null when the file has none. The CPU is read live, not from here. */
   machine: Machine | null;
@@ -92,7 +92,7 @@ export function parseLobbyFile(text: string): LobbyFile | null {
     const reason = str(o.reason);
     // 'pronta': a registry task with its brief written, waiting for a seat and a go. Anything else is a refusal, which is all the L1 file said.
     const kind: WaitingKind = str(o.kind) === 'pronta' ? 'ready' : 'refused';
-    queue.push({ id, name: str(o.name) ?? id, profile: str(o.profile), since: timeOf(o.since) ?? updatedAt ?? 0, reason: reason ? classifyReason(reason) : null, kind });
+    queue.push({ id, name: str(o.name) ?? id, profile: str(o.profile), since: timeOf(o.since) ?? updatedAt ?? 0, reason: reason ? classifyReason(reason) : null, kind, area: str(o.area), repo: str(o.repo) });
   }
   return { gate, queue, working: int(d.working), machine: parseMachine(d.machine), plan: str(obj(d.capacity)?.plan), updatedAt };
 }

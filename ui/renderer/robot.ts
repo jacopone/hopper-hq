@@ -5,7 +5,8 @@
  * swinging its legs and arms.
  * Two smaller kinds share the build: a workflow agent wears a hard hat, and an intern flies on a jetpack, without legs.
  */
-import { CylinderGeometry, Group, SphereGeometry, type Mesh } from 'three';
+import { CylinderGeometry, Group, Shape, ShapeGeometry, SphereGeometry, type Mesh } from 'three';
+import type { Org } from '../../src/scene/palette';
 import type { Pose, Robot } from '../../src/scene/types';
 import type { Materials } from './materials';
 import { part, type Geometries, type PickData } from './props';
@@ -82,6 +83,8 @@ export interface RobotObject {
   /** The colour slots it was built with; a change of either rebuilds the robot. */
   readonly body: number;
   readonly tie: number | null;
+  /** The organisation of its lanyard; null: none. */
+  readonly org: Org | null;
   readonly pickables: readonly Mesh[];
 }
 
@@ -144,6 +147,12 @@ export function buildRobot(sessionId: string, robot: Robot, geo: Geometries, mat
   const knotY = BOT.torso - 0.05;
   part(waist, geo.box(0.05, 0.04, 0.03), tie, 0, knotY, 0.125, small);
   part(waist, tieBlade(geo), tie, 0, knotY - 0.12, 0.121, { rx: 0.08, cast: false });
+  // The lanyard: a V of strap from the neck and a card, in the colour of the account's organisation. Flat on the chest, so no shadow.
+  if (robot.org) {
+    const strap = mats.org(robot.org);
+    part(waist, lanyardStrap(geo), strap, 0, BOT.torso, 0.123, small);
+    part(waist, geo.box(0.09, 0.065, 0.012), strap, 0, BOT.torso - 0.215, 0.126, small);
+  }
   const paper = part(armR, geo.box(0.2, 0.015, 0.26), s.paper, -0.07, -BOT.arm - 0.03, 0.05, { rx: 2.6 });
 
   const laptop = buildLaptop(group, kind, geo, mats);
@@ -157,7 +166,7 @@ export function buildRobot(sessionId: string, robot: Robot, geo: Geometries, mat
       pickables.push(o as Mesh);
     }
   });
-  return { sessionId, kind, group, rig: { legL, legR, waist, armL, armR, neck, paper, laptop }, body: robot.body, tie: robot.tie, pickables };
+  return { sessionId, kind, group, rig: { legL, legR, waist, armL, armR, neck, paper, laptop }, body: robot.body, tie: robot.tie, org: robot.org, pickables };
 }
 
 /**
@@ -321,6 +330,21 @@ function buildLaptop(root: Group, kind: RobotKind, geo: Geometries, mats: Materi
 
 function dome(geo: Geometries) {
   return geo.shared('hard hat', () => new SphereGeometry(0.155, 20, 8, 0, Math.PI * 2, 0, Math.PI / 2));
+}
+
+/** The strap's V, from the neck: two bands meeting below. */
+function lanyardStrap(geo: Geometries) {
+  return geo.shared('lanyard strap', () => {
+    const s = new Shape();
+    s.moveTo(-0.105, 0);
+    s.lineTo(-0.072, 0);
+    s.lineTo(0, -0.168);
+    s.lineTo(0.072, 0);
+    s.lineTo(0.105, 0);
+    s.lineTo(0, -0.215);
+    s.closePath();
+    return new ShapeGeometry(s);
+  });
 }
 
 function tieBlade(geo: Geometries) {

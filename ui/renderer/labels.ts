@@ -14,6 +14,7 @@
  * never as a hover or the focus grows them. The floor panel lists every session and room, whatever the view shows.
  */
 import { Vector3, type Camera } from 'three';
+import { ORG_LABEL, ORG_LETTER } from '../../src/scene/palette';
 import { STATE_LABEL } from '../../src/scene/text';
 import type { FloorDetail, MeetingRoom, Occupant, PhaseState, Pod, PodDesk, ShownState } from '../../src/scene/types';
 import type { Target } from './index';
@@ -331,13 +332,15 @@ export class LabelLayer {
     const key = deskKey(occupant.sessionId);
     const tag = this.button(key, { kind: 'desk', id: occupant.sessionId }, { kind: 'desk', state: occupant.state });
     tag.anchor = labelAnchor(floor, desk, occupant);
-    const shows = JSON.stringify([occupant.name, occupant.state, occupant.robot?.badge ?? null, occupant.agentsRunning, occupant.location]);
+    const shows = JSON.stringify([occupant.name, occupant.state, occupant.robot?.badge ?? null, occupant.agentsRunning, occupant.location, occupant.task, occupant.org]);
     if (shows === tag.shows) return key;
     tag.shows = shows;
     const el = tag.el;
     el.className = ['fv-tag', `fv-st-${occupant.state}`, occupant.robot?.badge ? `fv-badge-${occupant.robot.badge}` : ''].filter(Boolean).join(' ');
     mark(el, sameTarget(this.selected, tag.target));
     const parts = [span('fv-dot', ''), span('fv-name', occupant.name)];
+    if (occupant.task) parts.push(span('fv-task', occupant.task));
+    if (occupant.org) parts.push(span(`fv-org fv-org-${occupant.org}`, ORG_LETTER[occupant.org]));
     if (occupant.state === 'needs_you') parts.push(span('fv-note', 'needs you'));
     if (occupant.agentsRunning > 0) parts.push(span('fv-agents', `+${occupant.agentsRunning}`));
     if (occupant.location === 'cloud') parts.push(span('fv-remote', 'remote'));
@@ -603,8 +606,10 @@ function mark(el: HTMLElement, selected: boolean): void {
 }
 
 /** The tag's tooltip: name, state, running agents, remote. */
-export function tagTitle(o: Pick<Occupant, 'name' | 'state' | 'agentsRunning' | 'location'>): string {
+export function tagTitle(o: Pick<Occupant, 'name' | 'state' | 'agentsRunning' | 'location'> & Partial<Pick<Occupant, 'task' | 'org'>>): string {
   const bits = [o.name, STATE_LABEL[o.state]];
+  if (o.task) bits.push(o.task);
+  if (o.org) bits.push(ORG_LABEL[o.org]);
   if (o.agentsRunning > 0) bits.push(`${o.agentsRunning} ${o.agentsRunning === 1 ? 'agent' : 'agents'} running`);
   if (o.location === 'cloud') bits.push('remote');
   return bits.join(' · ');

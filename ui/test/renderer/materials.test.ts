@@ -103,6 +103,17 @@ describe('materials', () => {
     expect(m.body(1.5)).toBe(m.body(0));
   });
 
+  it("gives each organisation a lanyard material in its token's colour, and recolours it with the theme", () => {
+    const theme = dayTheme();
+    const m = new Materials(theme);
+    for (const o of ['amatino', 'tenuta', 'personal', 'other'] as const) expect(hex(m.org(o).color)).toBe(theme.colors[`org-${o}`]);
+    expect(m.org('amatino')).not.toBe(m.org('tenuta'));
+    const night = dayTheme();
+    night.colors['org-amatino'] = '#4d7bff';
+    m.applyTheme(night);
+    expect(hex(m.org('amatino').color)).toBe('#4d7bff');
+  });
+
   it('lights a screen in its state colour at the screen intensity, as a glowing screen shows it, and leaves idle and dormant screens off', () => {
     const theme = dayTheme();
     const m = new Materials(theme);
@@ -150,8 +161,8 @@ describe('materials', () => {
     for (const x of m.all()) x.addEventListener('dispose', () => freed++);
     m.dispose();
     expect(freed).toBe(m.all().length);
-    // The surfaces, a body, joint and rug per repo slot, the ties, the screens, the ring and the contact disc.
-    expect(m.all().length).toBe(30 + 3 * 8 + 8 + 1 + 1 + 1 + 1);
+    // The surfaces, a body, joint and rug per repo slot, the ties, the four lanyards, the screens, the ring and the contact disc.
+    expect(m.all().length).toBe(30 + 3 * 8 + 8 + 1 + 4 + 1 + 1 + 1);
   });
 
   it('lays a soft black disc under a robot on its way, the same by day and by night, writing no depth', () => {

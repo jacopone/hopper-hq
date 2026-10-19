@@ -3,6 +3,7 @@
  * Every string is cleaned by the server (control and bidi characters removed, length capped).
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
+import type { Org } from './palette.js';
 import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting, WaitingKind } from '../core/types.js';
 
 export const SCENE_VERSION = 8;
@@ -22,6 +23,8 @@ export interface FacadeWindow {
   /** Null: a free desk, a dark window. */
   sessionId: string | null;
   state: ShownState | null;
+  /** The orchestrator's task of the session at the desk; null when it has none, or the desk is free. */
+  task: string | null;
 }
 
 export interface FloorSummary {
@@ -86,6 +89,10 @@ export interface QueueSlot {
   kind: WaitingKind;
   /** The colour slot of the repository its name begins with, when the building has a floor for it; null: a grey robot. */
   slot: number | null;
+  /** Its tie: its id's feature slot, the one its robot keeps when it is admitted. */
+  tie: number;
+  /** Its organisation, from the area the orchestrator gives it, else from its account; null when neither says. */
+  org: Org | null;
 }
 
 /** What the façade says of the Lobby. */
@@ -115,13 +122,52 @@ export interface PausedSession {
   name: string | null;
 }
 
+/** A seat in the detail: with the organisation of its account. */
+export interface SeatView extends Seat {
+  org: Org | null;
+}
+
+/** A session of a task on the board. */
+export interface TaskSession {
+  sessionId: string;
+  name: string;
+  state: ShownState;
+  org: Org | null;
+  /** Its repository's colour slot. */
+  body: number;
+  badge: Badge | null;
+}
+
+/** One of the orchestrator's tasks on the board: at the door (refused, or ready for a seat), or with sessions in the building. */
+export interface TaskCard {
+  id: string;
+  title: string | null;
+  /** Its tie. */
+  tie: number;
+  /** Its organisation: the area's, else its first session's account's. */
+  org: Org | null;
+  where: 'waiting' | 'refused' | 'live';
+  /** What keeps it out, for a refused one. */
+  reason: string | null;
+  /** Since when it waits (ms); null for a live one. */
+  since: number | null;
+  /** The account of the profile it asked for; null when it names none, or when it is live. */
+  account: string | null;
+  /** Empty while it waits. */
+  sessions: TaskSession[];
+  /** The subagents and workflow agents running under its sessions. */
+  subagents: number;
+}
+
 /** The Lobby in detail: the gatekeeper's Lobby, cleaned, with the paused panes resolved to sessions. */
 export interface LobbyDetail {
   version: typeof SCENE_VERSION;
   doorman: { name: string; sessionId: string | null };
   gate: GateVerdict | null;
   queue: Waiting[];
-  seats: Seat[];
+  /** The board: the line outside, refused first, then the tasks with a session in the building, the one with most sessions first. */
+  tasks: TaskCard[];
+  seats: SeatView[];
   turnTo: string | null;
   power: (Power & { paused: PausedSession[] }) | null;
   cap: Lobby['cap'];
@@ -161,8 +207,10 @@ export interface Robot {
   badge: Badge | null;
   /** Repo colour slot, 0..REPO_SLOTS-1 (body). */
   body: number;
-  /** Feature colour slot, 0..FEATURE_SLOTS-1 (tie); null on department floors. */
+  /** Feature colour slot, 0..FEATURE_SLOTS-1 (tie): the feature's, else its task's; null when it has neither. */
   tie: number | null;
+  /** The organisation of the account it works under (the lanyard); null when the account names none. */
+  org: Org | null;
 }
 
 export interface DeskActivity {
@@ -271,6 +319,8 @@ export interface Occupant {
   account: string | null;
   /** The orchestrator's task id; null when none. */
   task: string | null;
+  /** The organisation of its account; null when the account is not an email. */
+  org: Org | null;
   /** The pane id for display, as the terminal writes it ('%N' in tmux, 'wK:p2' in herdr); focus goes through POST /api/focus by sessionId. */
   pane: string | null;
   focusable: boolean;
