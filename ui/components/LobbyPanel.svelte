@@ -267,7 +267,7 @@
           </div>
         {/each}
       </div>
-      {#if lobby.machine.rebuild}<p class="chip">rebuild under way</p>{/if}
+      {#if lobby.machine.rebuild}<p class="rebuild">rebuild under way</p>{/if}
     {:else}
       <p class="p-note">No reading of the machine.</p>
     {/if}
@@ -305,7 +305,7 @@
         <ul class="list usage-sessions">
           {#each u.sessions.slice(0, USAGE_SHOWN) as s (s.sessionId)}
             <li>
-              <span class="line">{s.name}{s.task ? ` · ${s.task}` : ''} · in {tok(s.tokens.input)} · write {tok(s.tokens.cacheWrite)} · read {tok(s.tokens.cacheRead)} · out {tok(s.tokens.output)} · {usd(s.costUsd)}{counting(s)}</span>
+              <span class="line">{s.name}{s.task && !s.name.startsWith(s.task) ? ` · ${s.task}` : ''} · in {tok(s.tokens.input)} · write {tok(s.tokens.cacheWrite)} · read {tok(s.tokens.cacheRead)} · out {tok(s.tokens.output)} · {usd(s.costUsd)}{counting(s)}</span>
               {#if s.subagentsCount > 0}
                 <span class="subs-head">{plural(s.subagentsCount, 'subagent', 'subagents')} · {tok(sumOf(s.subagentsTally))} tokens · {usd(s.subagentsTally.costUsd)}{counting(s.subagentsTally)}</span>
                 <ul class="subs">
@@ -414,7 +414,7 @@
   .g-value { grid-area: value; text-align: right; overflow-wrap: anywhere; }
   .g-bar { grid-area: bar; }
   .gauge.over .g-value { color: var(--needs-ink); font-weight: 500; }
-  .chip { display: inline-block; margin: 8px 0 0; padding: 1px 8px; border-radius: 10px; background: var(--hover); color: var(--needs-ink); font-size: 12px; }
+  .rebuild { display: inline-block; margin: 8px 0 0; padding: 1px 8px; border-radius: 10px; background: var(--hover); color: var(--needs-ink); font-size: 12px; }
   .seats li { display: grid; gap: 3px; }
   .usage-total { margin: 4px 0; font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
   .usage-sessions, .rates { margin-top: 6px; font-size: 11.5px; }

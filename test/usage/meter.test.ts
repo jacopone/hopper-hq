@@ -135,6 +135,25 @@ describe("UsageMeter and a session's subagents", () => {
     expect(m.read().get('A')!.subagents.map((s) => s.agentId)).toEqual(['a1', 'a2', 'a3', 'w1']);
   });
 
+  it('reads the least read transcript first, so that a session found late is counted before a long one is finished', async () => {
+    const long = await file(Array.from({ length: 400 }, (_, i) => reply(`l${i}`, { output_tokens: 1 }, { pad: 'x'.repeat(2000) })));
+    const m = new UsageMeter(64 * 1024, 16 * 1024);
+    for (let i = 0; i < 3; i++) await m.poll([{ id: 'L', transcript: long }]);
+    const late = await file([reply('n', { output_tokens: 9 })]);
+    await m.poll([{ id: 'L', transcript: long }, { id: 'N', transcript: late }]);
+    expect(m.read().get('N')!.main).toMatchObject({ done: true, tokens: { output: 9 } });
+    expect(m.read().get('L')!.main.done).toBe(false);
+  });
+
+  it('never drops a line for want of budget: a poll with little left reads on to the end of the line', async () => {
+    const big = reply('big', { output_tokens: 11 }, { pad: 'x'.repeat(60_000) });
+    const a = await file(Array.from({ length: 30 }, (_, i) => reply(`a${i}`, { output_tokens: 1 }, { pad: 'x'.repeat(2000) })));
+    const b = await file([big, reply('after', { output_tokens: 1 })]);
+    const m = new UsageMeter(50_000);
+    for (let i = 0; i < 6; i++) await m.poll([{ id: 'A', transcript: a }, { id: 'B', transcript: b }]);
+    expect([...m.read().values()].map((u) => [u.main.tokens.output, u.main.done])).toEqual([[30, true], [12, true]]);
+  });
+
   it('has no subagents for a session whose directory has none', async () => {
     const m = new UsageMeter();
     await m.poll([{ id: 'A', transcript: await file([reply('m', { output_tokens: 5 })]) }]);

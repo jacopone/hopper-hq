@@ -213,7 +213,9 @@ describe('LobbyPanel', () => {
     const machine = panel({ ...detail, machine: sick }).section('Machine');
     expect([...machine.querySelectorAll('.gauge')].map((g) => g.classList.contains('over'))).toEqual([true, true, true, true, true]);
     expect(text([...machine.querySelectorAll('.gauge')].at(-1))).toBe('CPU 600 MHz · 24 cores · throttled');
-    expect(text(machine.querySelector('.chip'))).toBe('rebuild under way');
+    expect(text(machine.querySelector('.rebuild'))).toBe('rebuild under way');
+    // The organisation's chip is its own class: a second '.chip' rule in the panel once painted every chip grey.
+    expect(machine.querySelector('.chip')).toBeNull();
   });
 
   it("agrees with the gate on the load, which it floors, and on the brake, which the machine's own flag decides", () => {
@@ -286,6 +288,10 @@ describe('LobbyPanel', () => {
       'pr-medic 1 · G-178 · in 1.2k · write 340k · read 4.56M · out 98.0k · $7.81',
       'pr-medic 2 · in 12 · write 0 · read 0 · out 900 · <$0.01 · counting…',
     ]);
+    // A name that begins with its task says it once.
+    cleanup();
+    const named = panel({ ...detail, usage: { ...detail.usage!, sessions: [{ ...detail.usage!.sessions[0]!, name: 'G-178 pr-medic' }] } }).section('Tokens at list price');
+    expect(text(named.querySelector('.usage-sessions > li > .line'))).toBe('G-178 pr-medic · in 1.2k · write 340k · read 4.56M · out 98.0k · $7.81');
     // A session's subagents: the dearest INTERNS_MAX listed under it, the rest counted with what they cost together.
     const subs = u.querySelector('.usage-sessions > li')!;
     expect(text(subs.querySelector('.subs-head'))).toBe('6 subagents · 369k tokens · $0.55 · counting…');

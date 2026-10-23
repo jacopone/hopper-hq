@@ -25,6 +25,8 @@ const word = (v: unknown, fallback: string): string => (typeof v === 'string' &&
  * reply, each with the reply's usage, so the id is what a reply is counted once by. Null for any other line.
  */
 export function usageOfLine(line: string): { id: string; usage: MessageUsage } | null {
+  // Most of a transcript is tool results and prompts: a line without a usage is not parsed at all.
+  if (!line.includes('"usage"')) return null;
   let e: Obj | null;
   try {
     e = obj(JSON.parse(line));
@@ -51,7 +53,7 @@ const KINDS = ['input', 'cacheWrite5m', 'cacheWrite1h', 'cacheRead', 'output'] a
 const sumOf = (u: MessageUsage) => KINDS.reduce((n, k) => n + u[k], 0);
 
 /** How much of a file one read takes at most, so that the first pass over a long transcript is spread over polls. */
-export const READ_BUDGET = 4 * 1024 * 1024;
+export const READ_BUDGET = 8 * 1024 * 1024;
 
 /**
  * One transcript's usage, read whole from its start and then as it grows. A reply seen again keeps the largest count
@@ -67,21 +69,30 @@ export class UsageFile {
   /** The whole file, as it was at the last read, is counted. */
   done = false;
 
+  /** How far it is read, in bytes. */
+  get offset(): number {
+    return this.tail.offset;
+  }
+
   constructor(readonly path: string) {
     this.tail = { path, offset: 0, skipping: false };
   }
 
-  async read(budget = READ_BUDGET): Promise<void> {
+  /**
+   * Reads on from where the last read stopped, at most `maxBytes`, and says how many bytes it took. A line longer than
+   * `maxBytes` is skipped: no reply's line is that long.
+   */
+  async read(maxBytes = READ_BUDGET): Promise<number> {
     let size: number;
     try {
       size = (await stat(this.path)).size;
     } catch {
       this.done = true;
-      return;
+      return 0;
     }
     if (size < this.tail.offset) this.reset();
     const before = this.tail.offset;
-    const { lines, state } = await readNewLines(this.tail, budget);
+    const { lines, state } = await readNewLines(this.tail, maxBytes);
     this.tail = state;
     for (const line of lines) {
       const r = usageOfLine(line);
@@ -89,6 +100,7 @@ export class UsageFile {
     }
     // A line still being written leaves the offset where it was: what is complete is counted.
     this.done = this.tail.offset >= size || (this.tail.offset === before && !this.tail.skipping);
+    return Math.max(0, this.tail.offset - before);
   }
 
   private reset(): void {
@@ -190,7 +202,7 @@ async function names(dir: string): Promise<string[]> {
 }
 
 /** How much the meter reads at most in one poll, across every transcript: the first pass over the building is spread over polls. */
-export const POLL_BUDGET = 16 * 1024 * 1024;
+export const POLL_BUDGET = 64 * 1024 * 1024;
 
 /**
  * The usage of the sessions in the building, from their transcripts, read whole and then as they grow. Read-only; it
@@ -201,7 +213,11 @@ export class UsageMeter {
   private timer: NodeJS.Timeout | null = null;
   private busy = false;
 
-  constructor(private readonly budget = POLL_BUDGET) {}
+  /** `step`: the most one read of one file takes; a reply's line longer than it is skipped. */
+  constructor(
+    private readonly budget = POLL_BUDGET,
+    private readonly step = READ_BUDGET,
+  ) {}
 
   start(sessions: () => readonly MeteredSession[], intervalMs = 10_000): void {
     if (this.timer) return;
@@ -231,11 +247,11 @@ export class UsageMeter {
       for (const id of [...this.sessions.keys()]) if (!live.has(id)) this.sessions.delete(id);
       let left = this.budget;
       const files = [...this.sessions.values()].flatMap((m) => [m.main, ...[...m.agents.values()].map((a) => a.file)]);
-      for (const f of files.sort((a, b) => Number(a.done) - Number(b.done))) {
+      // The least read first, so that every session soon has a figure while a long transcript is still being counted. Each
+      // read takes a whole step, so that no line is cut by what is left of the budget; the budget counts what was read.
+      for (const f of files.sort((a, b) => Number(a.done) - Number(b.done) || a.offset - b.offset)) {
         if (left <= 0) break;
-        const step = Math.min(left, READ_BUDGET);
-        await f.read(step);
-        left -= step;
+        left -= await f.read(this.step);
       }
     } finally {
       this.busy = false;
