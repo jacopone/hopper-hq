@@ -4,8 +4,8 @@
  */
 import type * as Renderer from '../renderer/index';
 
-/** What the floor stage uses of the renderer. */
-export type RendererModule = Pick<typeof Renderer, 'mountFloorView' | 'readThemeTokens'>;
+/** What the floor and Lobby stages use of the renderer. */
+export type RendererModule = Pick<typeof Renderer, 'mountFloorView' | 'mountLobbyView' | 'readThemeTokens'>;
 
 export function loadRenderer(): Promise<RendererModule> {
   return import('../renderer/index');

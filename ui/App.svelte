@@ -17,6 +17,7 @@
   import FloorPanel from './components/FloorPanel.svelte';
   import FloorStage from './components/FloorStage.svelte';
 import LobbyPanel from './components/LobbyPanel.svelte';
+  import LobbyStage from './components/LobbyStage.svelte';
   import Notice from './components/Notice.svelte';
   import RunPanel from './components/RunPanel.svelte';
   import Toast from './components/Toast.svelte';
@@ -266,8 +267,10 @@ import LobbyPanel from './components/LobbyPanel.svelte';
       <AttentionBar attention={scene.attention} terminal={scene.terminal.kind} now={clock} onOpen={openEntry} onGo={(entry) => focus(entry.sessionId)} />
     {/if}
     <main class="main">
-      <section class="stage" aria-label={route.floor === null ? 'Building' : 'Floor'} bind:this={stage}>
-        {#if route.floor === null}
+      <section class="stage" aria-label={route.lobby ? 'Lobby' : route.floor === null ? 'Building' : 'Floor'} bind:this={stage}>
+        {#if route.lobby && lobbyDetail}
+          <LobbyStage lobby={lobbyDetail} theme={resolvedTheme(theme, systemDark)} load={renderer} />
+        {:else if route.floor === null}
           {#if scene}
             <Facade
               floors={scene.floors}
