@@ -73,8 +73,9 @@
   const counting = (t: Tally) => (t.counting ? ' · counting…' : '');
   /** The sessions listed by name; the rest are counted in the totals. */
   const USAGE_SHOWN = 12;
+  /** The watchdog's mark is a share of the cap: without a cap there is none to name. */
   const gauge = (p: NonNullable<LobbyDetail['power']>) =>
-    `${gib(p.usedBytes)} / ${p.maxBytes === null ? 'no cap' : `${gib(p.maxBytes)} GiB (${pct(p.usedBytes, p.maxBytes)}%)`} · mark ${p.warnPct}%`;
+    p.maxBytes === null ? `${gib(p.usedBytes)} GiB used · no cap` : `${gib(p.usedBytes)} / ${gib(p.maxBytes)} GiB (${pct(p.usedBytes, p.maxBytes)}%) · mark ${p.warnPct}%`;
   const pausedLabel = (p: PausedSession) => `${p.name ?? 'a session'} (${p.pane})`;
 
   /** The frequency a full CPU bar stands for. */
@@ -140,7 +141,7 @@
   const power = $derived(lobby?.power ?? null);
   const powerPct = $derived(power && power.maxBytes ? share(power.usedBytes, power.maxBytes) : null);
   const powerMarks = $derived(
-    power ? [...(lobby?.limits ? [{ at: lobby.limits.slicePct, label: `the gate refuses at ${lobby.limits.slicePct}%` }] : []), { at: power.warnPct, label: `the watchdog pauses at ${power.warnPct}%` }] : [],
+    power && power.maxBytes !== null ? [...(lobby?.limits ? [{ at: lobby.limits.slicePct, label: `the gate refuses at ${lobby.limits.slicePct}%` }] : []), { at: power.warnPct, label: `the watchdog pauses at ${power.warnPct}%` }] : [],
   );
 
   /** The places under the working cap as pips: at work, free now, and held back (by the seats or the pace). */

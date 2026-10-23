@@ -123,6 +123,7 @@
       <polygon class="sfill st-empty" points={model.lobby.side} />
       {#if model.gate}{@render queue(model.gate, lobby)}{/if}
       {@render label(model.lobby.label, 'L', 'Lobby', lobbyMeta(lobby))}
+      <polygon class="outline" points={model.lobby.outline} />
     </g>
   {:else}
     <g class="lobby">

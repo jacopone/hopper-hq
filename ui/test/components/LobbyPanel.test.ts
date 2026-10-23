@@ -296,6 +296,12 @@ describe('LobbyPanel', () => {
     expect(text(panel({ ...detail, usage: null }).section('Tokens at list price').querySelector('.p-note'))).toBe('The building does not meter its sessions.');
   });
 
+  it("names the watchdog's mark only against a cap: without one there is no mark to reach", () => {
+    const m = panel({ ...detail, power: { ...detail.power!, maxBytes: null } }).section('Session memory');
+    expect(text(m.querySelector('.gauge-text'))).toBe('34.6 GiB used · no cap');
+    expect(m.querySelectorAll('.bar .mark')).toHaveLength(0);
+  });
+
   it('draws each seat\'s two windows as bars', () => {
     const seats = panel().section('Seats');
     const first = seats.querySelector('li')!;

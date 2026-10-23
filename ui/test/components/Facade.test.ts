@@ -47,9 +47,12 @@ describe('Facade', () => {
     expect(refused).not.toBe(ready);
     lobby.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onLobby).toHaveBeenCalled();
+    // A button that takes focus shows it: the Lobby has the outline a floor has, lit on hover and focus.
+    expect(lobby.querySelector('polygon.outline')!.getAttribute('points')).toMatch(/\d/);
     cleanup();
     const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
     expect(plain.querySelector('g.lobby')!.getAttribute('role')).toBeNull();
+    expect(plain.querySelector('g.lobby polygon.outline')).toBeNull();
   });
 
   it('draws the queue as micro-robots outside the doors: the refused with the needs badge, the ready with the clock, a group with its count beyond, the doorman at the door', () => {

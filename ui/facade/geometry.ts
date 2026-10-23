@@ -131,7 +131,7 @@ export interface FacadeModel {
   width: number;
   shadow: { cx: number; cy: number; rx: number; ry: number };
   plinth: Box;
-  lobby: { wall: Box; windows: string[]; doors: string[]; side: string; label: Label };
+  lobby: { wall: Box; windows: string[]; doors: string[]; side: string; label: Label; outline: string };
   /** Bottom-up, the order they are drawn in. */
   floors: FacadeFloor[];
   roof: { slab: Box; units: Box[]; mast: Line };
@@ -195,6 +195,8 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, wit
     doors,
     side: points(onSide(W, 0.3, D - 0.3, 14, LOBBY_H - 10)),
     label: labelAt(b, project(W, 0, LOBBY_H / 2), labelX, lobbyMeta),
+    // The outline a floor has, over the lobby's front and side: what hover and focus light when the Lobby is a button.
+    outline: points([project(0, D, LOBBY_H), project(0, D, 0), project(W, D, 0), project(W, 0, 0), project(W, 0, LOBBY_H), project(W, D, LOBBY_H)]),
   };
 
   const stacked: FacadeFloor[] = [];

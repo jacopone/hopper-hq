@@ -42,6 +42,18 @@ describe("the gatekeeper's task events", () => {
     await c.ingest(hook({ type: 'session.seen', sessionId: 'S2', name: 'orders-api-a1', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
     expect(c.session('S2')?.task).toBe('G-9');
   });
+
+  it("keeps the task a session's name gives when the registry names another for its pane: the name comes first, so the task does not flap", async () => {
+    const c = collector();
+    await c.ingest(hook({ type: 'session.seen', name: 'G-268 hopper-hq', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    let changes = 0;
+    c.onChange(() => changes++);
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: 'G-301' });
+    expect(c.session('S1')?.task).toBe('G-268');
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: null });
+    expect(c.session('S1')?.task).toBe('G-268');
+    expect(changes).toBe(0);
+  });
 });
 
 describe('the Lobby', () => {
