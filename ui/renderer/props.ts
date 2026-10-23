@@ -423,10 +423,10 @@ export interface Nameplate {
   dispose(): void;
 }
 
-/** What a nameplate shows of a name: all of it, or its first NAMEPLATE_CHARS - 1 graphemes and an ellipsis. */
-export function nameplateText(name: string): string {
+/** What a nameplate shows of a name: all of it, or its first `max` - 1 graphemes and an ellipsis. */
+export function nameplateText(name: string, max = NAMEPLATE_CHARS): string {
   const chars = Array.from(GRAPHEMES.segment(name), (g) => g.segment);
-  return chars.length > NAMEPLATE_CHARS ? chars.slice(0, NAMEPLATE_CHARS - 1).join('') + '\u2026' : name;
+  return chars.length > max ? chars.slice(0, max - 1).join('') + '\u2026' : name;
 }
 
 /** Draws a nameplate's card and, centred on it, the name: as text, with fillText only, so that no name is ever markup. */
