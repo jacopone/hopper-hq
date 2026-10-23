@@ -217,6 +217,11 @@ describe("the board of Gordon's tasks", () => {
     expect(d.tasks.map((t) => t.tie)).toEqual([slotOf('G-8', FEATURE_SLOTS), slotOf('G-9', FEATURE_SLOTS)]);
   });
 
+  it("gives each task its robot's colour: a waiting one its repository's when the building has a floor for it, a live one its first session's", () => {
+    const d = buildLobbyDetail({ ...lobby, queue: [wait('G-1', 'refused', { repo: 'app' }), wait('G-2', 'ready', { name: 'Wi-Fi del portatile' })] }, [session('S1', { task: 'G-5', state: 'working' })], NOW);
+    expect(d.tasks.map((t) => [t.id, t.body])).toEqual([['G-1', slotOf('/w/app', REPO_SLOTS)], ['G-2', null], ['G-5', slotOf('/w/app', REPO_SLOTS)]]);
+  });
+
   it("lists the tasks with a session in the building, the one with most sessions first, each session with its state, organisation and body, and the subagents running under them", () => {
     const views = [
       session('S1', { task: 'G-5', account: 'luca@amatino.ai', state: 'working', children: [{ id: 'c1', type: 'Explore', description: null, running: true, lastAction: null, updatedAt: NOW }] }),

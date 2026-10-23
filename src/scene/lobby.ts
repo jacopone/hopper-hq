@@ -145,6 +145,7 @@ function pausedOf(panes: readonly string[], views: readonly SessionView[]): Paus
  * a session in the building, the one with most sessions first. A task that waits and already has a session is only live.
  */
 function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
+  const repos = repoSlots(views);
   const groups = new Map<string, SessionView[]>();
   for (const v of views) {
     const id = cleanOrNull(v.task, 64);
@@ -160,6 +161,7 @@ function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
       title: cleanOrNull(w.name, 120),
       tie: slotOf(cleanText(w.id, 64), FEATURE_SLOTS),
       org: waitingOrg(w),
+      body: slotOfWaiting(w, repos),
       where: w.kind === 'refused' ? 'refused' : 'waiting',
       reason: w.reason ? cleanText(w.reason.text) : null,
       since: w.since,
@@ -173,6 +175,7 @@ function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
       title: taskTitle(vs[0]!),
       tie: slotOf(id, FEATURE_SLOTS),
       org: vs.map((v) => orgOfAccount(cleanOrNull(v.account))).find((o) => o !== null) ?? null,
+      body: slotOf(repoRootOf(vs[0]!), REPO_SLOTS),
       where: 'live',
       reason: null,
       since: null,

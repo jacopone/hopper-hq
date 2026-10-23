@@ -159,6 +159,8 @@ export interface TaskCard {
   tie: number;
   /** Its organisation: the area's, else its first session's account's. */
   org: Org | null;
+  /** Its robot's colour slot: a waiting task's repository's when the building has a floor for it, a live one's first session's; null: grey. */
+  body: number | null;
   where: 'waiting' | 'refused' | 'live';
   /** What keeps it out, for a refused one. */
   reason: string | null;
