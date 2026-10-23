@@ -1,6 +1,6 @@
 <script lang="ts">
   import type { FloorSummary } from '../../src/scene/types';
-  import { STATES, STATE_ORDER, floorWhat, needYou, plural, sessionsOf } from '../lib/words';
+  import { STATES, STATE_ORDER, floorWhat, headcount, needYou, plural, sessionsOf } from '../lib/words';
 
   /** The floor directory, top to bottom as on the façade, and what the colours mean. */
   interface Props {
@@ -34,7 +34,7 @@
             {#if f.counts.done}<span class="cnt-done"><span aria-hidden="true">✓</span>{f.counts.done}<span class="visually-hidden">{' done'}</span></span>{/if}
             {#if f.shutters}<span class="cnt-shut">shut</span>{/if}
           </span>
-          <span class="fl-meta">{`${floorWhat(f, Infinity)} · ${plural(sessionsOf(f), 'session', 'sessions')}${f.accounts.length > 0 ? ` · ${f.accounts.join(', ')}` : ''}`}</span>
+          <span class="fl-meta">{`${floorWhat(f, Infinity)} · ${headcount(f)}${f.accounts.length > 0 ? ` · ${f.accounts.join(', ')}` : ''}`}</span>
         </button>
       </li>
     {/each}

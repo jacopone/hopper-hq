@@ -1,14 +1,15 @@
 import { describe, expect, it } from 'vitest';
-import { newSession } from '../../src/core/reducer.js';
+import { applyEvent, newSession } from '../../src/core/reducer.js';
 import type { ChildAgent, RunAgent, Session, SessionState, WorkflowRun, Workspace } from '../../src/core/types.js';
 import { toView, type SessionView } from '../../src/core/view.js';
 import { buildFloorDetail, buildScene } from '../../src/scene/build.js';
-import { BLOCK_DESKS, BLOCKS_MAX, layoutPlan, LOUNGE_SEATS, UNSEATED_MAX } from '../../src/scene/layout.js';
+import { AGENT_WINDOWS_MAX, BLOCK_DESKS, BLOCKS_MAX, layoutPlan, LOUNGE_SEATS, UNSEATED_MAX } from '../../src/scene/layout.js';
 import { FEATURE_SLOTS, REPO_SLOTS, slotOf } from '../../src/scene/palette.js';
 import { emptySeating, type Seating } from '../../src/scene/seating.js';
 import { capKey } from '../../src/scene/text.js';
 import { SCENE_VERSION, type FloorDetail, type MeetingRoom, type Occupant } from '../../src/scene/types.js';
 import { demoViews } from '../helpers/demo-views.js';
+import { ev, WS } from '../helpers/events.js';
 
 const MIN = 60_000;
 const DAY = 24 * 60 * MIN;
@@ -94,9 +95,10 @@ describe('the demo building', () => {
 
   it('builds a floor as its summary without windows, plus its layout', () => {
     scene.floors.forEach((f, i) => {
-      const { windows, ...summary } = f;
+      const { windows, agentWindows: _agentWindows, ...summary } = f;
       expect(floors[i]).toMatchObject({ version: SCENE_VERSION, ...summary });
       expect(floors[i]).not.toHaveProperty('windows');
+      expect(floors[i]).not.toHaveProperty('agentWindows');
       expect(windows).toHaveLength(floors[i]!.pods.length * 4);
     });
     expect(buildFloorDetail(views, 'feature:nope')).toBeNull();
@@ -532,12 +534,13 @@ describe('wait reasons', () => {
   });
 });
 
-describe('version 9', () => {
-  it('gives floors, desks and attention entries no rooms, interns, runs, summary, account or task while their sessions have none, tmux for a terminal, and no lobby', () => {
+describe('version 10', () => {
+  it('gives floors, desks and attention entries no rooms, interns, runs, agents, summary, account or task while their sessions have none, tmux for a terminal, and no lobby', () => {
     const views = [view('a', ws('/w/api', 'main'), 'done')];
     const floor = buildFloorDetail(views, 'repo:/w/api')!;
-    expect(SCENE_VERSION).toBe(9);
-    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal]).toEqual([9, [], 0, [], [], 'tmux']);
+    expect(SCENE_VERSION).toBe(10);
+    expect([floor.version, floor.rooms, floor.roomsMore, floor.unseated, floor.accounts, floor.terminal, floor.agents]).toEqual([10, [], 0, [], [], 'tmux', 0]);
+    expect(buildScene(views).floors[0]!.agentWindows).toEqual([]);
     const desk = occupants(floor)[0]!;
     expect([desk.summary, desk.interns, desk.internsMore, desk.at, desk.runs, desk.account, desk.task]).toEqual([null, [], 0, { kind: 'desk' }, [], null, null]);
     const scene = buildScene(views);
@@ -914,5 +917,51 @@ describe('determinism', () => {
     const copy = structuredClone(views);
     render(views);
     expect(views).toEqual(copy);
+  });
+});
+
+describe("a floor's agent lights", () => {
+  /** A session that started two subagents and a workflow run of three agents, from the events the collector reduces. */
+  function busySession(finished: string[]): SessionView {
+    const t = NOW - 5 * MIN;
+    const events = [
+      ev('session.seen', t, { workspace: WS, pid: 42, name: 'orders-api-a1', tmuxPane: '%7', startedAt: t }),
+      ev('prompt', t + 1, { text: 'ship it' }),
+      ev('agent.started', t + 2, { agentId: 'sub1', agentType: 'Explore', description: null }),
+      ev('agent.started', t + 3, { agentId: 'sub2', agentType: 'Plan', description: null }),
+      ev('workflow.started', t + 4, { runId: 'wf_build', name: 'build', phases: ['Plan', 'Build'] }),
+      ...['wa1', 'wa2', 'wa3'].map((id, i) => ev('agent.started', t + 5 + i, { agentId: id, agentType: 'workflow-subagent', description: null, runId: 'wf_build', phase: 'Build', source: 'fs' })),
+      ...finished.map((id, i) => ev('agent.finished', t + 10 + i, { agentId: id })),
+    ];
+    const s = events.reduce<Session | undefined>((prev, e) => applyEvent(prev, e), undefined)!;
+    return toView(s, NOW);
+  }
+
+  it('lights one window for each running subagent and workflow agent: one session, two subagents and a run of three with one done give 1 session and 4 agents', () => {
+    const f = buildScene([busySession(['wa3'])]).floors[0]!;
+    expect(Object.values(f.counts).reduce((n, c) => n + (c ?? 0), 0)).toBe(1);
+    expect(f.agents).toBe(4);
+    expect(f.agentWindows).toEqual(Array(4).fill({ sessionId: 'S1' }));
+  });
+
+  it('turns off the light of an agent that finished, and leaves a floor without running agents unlit', () => {
+    expect(buildScene([busySession(['wa3', 'sub1'])]).floors[0]!.agents).toBe(3);
+    const quiet = buildScene([busySession(['sub1', 'sub2', 'wa1', 'wa2', 'wa3'])]).floors[0]!;
+    expect([quiet.agents, quiet.agentWindows]).toEqual([0, []]);
+  });
+
+  it('lights at most AGENT_WINDOWS_MAX windows a floor, counting every running agent, in the order of the floor’s sessions', () => {
+    const a = view('a', ws('/r/shop', 'main'), 'working', { startedAt: NOW - 2 * DAY, children: Array.from({ length: 5 }, (_, i) => child(`c${i}`, 'Explore')) });
+    const b = view('b', ws('/r/shop', 'main'), 'in_meeting', { runs: [run('wf_x', { agents: [runAgent('x1'), runAgent('x2'), runAgent('x3', { running: false })] })] });
+    const f = buildScene([b, a]).floors[0]!;
+    expect(f.agents).toBe(7);
+    expect(f.agentWindows.map((w) => w.sessionId)).toEqual([...Array(5).fill('a'), 'b'].slice(0, AGENT_WINDOWS_MAX));
+  });
+
+  it('counts the agents on the floor in detail, without its windows', () => {
+    const v = busySession(['wa3']);
+    const detail = buildFloorDetail([v], buildScene([v]).floors[0]!.key)!;
+    expect(detail.agents).toBe(4);
+    expect(detail).not.toHaveProperty('agentWindows');
   });
 });

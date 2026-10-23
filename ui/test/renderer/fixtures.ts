@@ -166,6 +166,7 @@ export function makeFloor(checkouts: CheckoutSpec[], key = 'feature:checkout-v2'
     repos: [...new Set(checkouts.map((i) => i.repo))].sort(),
     accounts: [],
     counts,
+    agents: 0,
     shutters: false,
     openedAt: 1000,
     size: plan.size,

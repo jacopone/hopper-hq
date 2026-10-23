@@ -27,9 +27,9 @@ describe('BuildingPanel', () => {
   it('shows what each floor is, its repos and its counts', () => {
     const { rows } = panel();
     expect(rows().map((r) => text(r.querySelector('.fl-meta')))).toEqual([
-      'orders-api, payments-svc, storefront-web · 4 sessions',
+      'orders-api, payments-svc, storefront-web · 4 sessions · 5 agents',
       'search-svc, storefront-web · 2 sessions',
-      'Department · 5 sessions',
+      'Department · 5 sessions · 1 agent',
       'docs-site, storefront-web · 2 sessions',
     ]);
     expect(rows().map((r) => text(r.querySelector('.fl-counts')))).toEqual(['◉1 needs you ✓1 done', '', '◉1 needs you ✓1 done', 'shut']);
@@ -42,7 +42,7 @@ describe('BuildingPanel', () => {
   it('lists the accounts on a floor after its sessions, when its sessions carry any', () => {
     const floors = makeScene().floors;
     floors[0]!.accounts = ['home', 'work@example.com'];
-    expect(text(panel(floors).rows()[0]!.querySelector('.fl-meta'))).toBe('orders-api, payments-svc, storefront-web · 4 sessions · home, work@example.com');
+    expect(text(panel(floors).rows()[0]!.querySelector('.fl-meta'))).toBe('orders-api, payments-svc, storefront-web · 4 sessions · 5 agents · home, work@example.com');
   });
 
   it('explains the windows in words, not by colour alone', () => {

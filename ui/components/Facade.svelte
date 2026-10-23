@@ -3,15 +3,16 @@
   import { FEATURE_SLOTS, slotOf } from '../../src/scene/palette';
   import type { FloorSummary, LobbySummary } from '../../src/scene/types';
   import { MIN_SCALE, NAME_MAX, facadeOf, type Box, type GateModel, type Label } from '../facade/geometry';
-  import { STATES, floorLabel, floorMeta, lobbyLabel, lobbyMeta, type Meta } from '../lib/words';
+  import { STATES, floorLabel, floorMeta, lobbyLabel, lobbyMeta, plural, type Meta } from '../lib/words';
   import Bot from './Bot.svelte';
   import Tank from './Tank.svelte';
 
   /**
    * The building from outside: one window per desk of each floor's plan, coloured by the state of whoever sits there and
-   * dark in its frame where the desk is free, and plain wall past the plan, so that a floor shows its size and how full it
-   * is; floors stacked on a lobby, newest on top. A floor is a button that goes inside; a window with somebody at its desk
-   * goes straight to that desk. A building too big for the stage at MIN_SCALE is drawn at that scale, and the stage
+   * dark in its frame where the desk is free; past the plan, a window lit in the meeting rooms' colour for each running
+   * subagent or workflow agent, at most AGENT_WINDOWS_MAX and a '+N' for the rest; then plain wall, so that a floor shows
+   * its size and how full it is; floors stacked on a lobby, newest on top. A floor is a button that goes inside; a window
+   * with somebody at its desk, or an agent's, goes straight to that desk. A building too big for the stage at MIN_SCALE is drawn at that scale, and the stage
    * scrolls.
    */
   interface Props {
@@ -158,6 +159,12 @@
           <polygon class="sfill st-free" points={w.points} />
         {/if}
       {/each}
+      {#each floor.agents as a, i (i)}
+        <polygon class="sfill st-agent lit" points={a.points} data-desk={a.sessionId}><title>Agent at work</title></polygon>
+      {/each}
+      {#if floor.agentsMore}
+        <text class="agents-more halo" x={floor.agentsMore.at[0]} y={floor.agentsMore.at[1]}><title>{plural(floor.agentsMore.count, 'more agent', 'more agents')} at work</title>+{floor.agentsMore.count}</text>
+      {/if}
       {#each floor.slats as s, i (i)}<line class="slat" x1={s[0]} y1={s[1]} x2={s[2]} y2={s[3]} />{/each}
       <polygon class="sfill st-empty" points={floor.side} />
       {@render label(floor.label, String(floor.number), cleanText(summary.name, NAME_MAX), floorMeta(summary))}
@@ -196,7 +203,7 @@
   .sfill.st-working { fill: var(--s-working); color: var(--s-working); }
   .sfill.st-needs_you { fill: var(--s-needs); color: var(--s-needs); animation: pulse 1.6s ease-in-out infinite; }
   .sfill.st-done { fill: var(--s-done); color: var(--s-done); }
-  .sfill.st-in_meeting { fill: var(--s-meeting); color: var(--s-meeting); }
+  .sfill.st-in_meeting, .sfill.st-agent { fill: var(--s-meeting); color: var(--s-meeting); }
   .sfill.st-no_signal { fill: var(--s-nosignal); color: var(--s-nosignal); animation: flicker 3.2s ease-in-out infinite; }
   .sfill.st-idle { fill: color-mix(in oklab, var(--win-off) 74%, var(--s-working)); }
   .sfill.st-dormant, .shut .sfill { fill: var(--shutter); animation: none; }
@@ -205,6 +212,7 @@
   .door { fill: color-mix(in oklab, var(--s-working) 55%, var(--win-off)); stroke: var(--edge); stroke-width: .5; }
   .slat { stroke: color-mix(in oklab, var(--shutter) 70%, var(--shade)); stroke-width: 1; }
   .mast { stroke: var(--muted); stroke-width: 1; }
+  .agents-more { font-family: var(--font-mono); font-size: 10px; font-weight: 700; fill: var(--meeting-ink); text-anchor: middle; dominant-baseline: central; }
   .tie-0 { --tie: var(--feature-0); }
   .tie-1 { --tie: var(--feature-1); }
   .tie-2 { --tie: var(--feature-2); }

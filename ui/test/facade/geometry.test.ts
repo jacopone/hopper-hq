@@ -20,7 +20,7 @@ function everyPoint(m: FacadeModel): Array<[number, number]> {
 
 function floorWith(n: number, overrides: Partial<FloorSummary> = {}): FloorSummary {
   const f = makeScene().floors[0]!;
-  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const, task: null })), ...overrides };
+  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const, task: null })), agents: 0, agentWindows: [], ...overrides };
 }
 
 describe('façade geometry', () => {
@@ -64,7 +64,7 @@ describe('façade geometry', () => {
 
   it('gives each desk of a floor\'s plan a window, in desk order, dark where it is free, and leaves the row past its plan to the wall', () => {
     const m = facadeOf(makeScene().floors);
-    expect(m.width).toBe(16);
+    expect(m.width).toBe(16 + 5);
     const checkout = m.floors[3]!;
     const free = (n: number) => Array<string>(n).fill('null:null:false');
     expect(checkout.windows.map((w) => `${w.sessionId}:${w.state}:${w.lit}`)).toEqual([
@@ -83,7 +83,21 @@ describe('façade geometry', () => {
     expect(xs).toEqual([...xs].sort((a, b) => a - b));
   });
 
-  it('is as wide as the busiest floor, and never narrower than six windows', () => {
+  it("puts a floor's agent windows past its desks' windows, and counts the agents beyond them in the cell after", () => {
+    const x0 = (p: string) => Number(p.split(' ')[0]!.split(',')[0]);
+    const f = facadeOf([floorWith(8, { agents: 2, agentWindows: [{ sessionId: 'a' }, { sessionId: 'b' }] })]).floors[0]!;
+    expect(f.agents.map((a) => a.sessionId)).toEqual(['a', 'b']);
+    expect(x0(f.agents[0]!.points)).toBeGreaterThan(x0(f.windows[7]!.points));
+    expect(x0(f.agents[1]!.points)).toBeGreaterThan(x0(f.agents[0]!.points));
+    expect(f.agentsMore).toBeNull();
+    const capped = facadeOf([floorWith(8, { agents: 9, agentWindows: Array.from({ length: 6 }, () => ({ sessionId: 'a' })) })]);
+    expect(capped.floors[0]!.agentsMore!.count).toBe(3);
+    expect(capped.floors[0]!.agentsMore!.at[0]).toBeGreaterThan(x0(capped.floors[0]!.agents[5]!.points));
+  });
+
+  it('is as wide as the busiest floor, its agents and their count included, and never narrower than six windows', () => {
+    expect(facadeOf([floorWith(8, { agents: 2, agentWindows: [{ sessionId: 'a' }, { sessionId: 'b' }] })]).width).toBe(10);
+    expect(facadeOf([floorWith(8, { agents: 9, agentWindows: Array.from({ length: 6 }, () => ({ sessionId: 'a' })) })]).width).toBe(8 + 6 + 1);
     expect(facadeOf([floorWith(9)]).width).toBe(9);
     expect(facadeOf([floorWith(2)]).width).toBe(6);
     expect(facadeOf([]).width).toBe(6);
@@ -92,7 +106,7 @@ describe('façade geometry', () => {
   it('lowers the shutters with three slats per window of its plan on a dormant floor only', () => {
     const m = facadeOf(makeScene().floors);
     expect(m.floors.map((f) => f.shutters)).toEqual([true, false, false, false]);
-    expect([m.width, m.floors[0]!.windows.length]).toEqual([16, 8]);
+    expect([m.width, m.floors[0]!.windows.length]).toEqual([16 + 5, 8]);
     expect(m.floors[0]!.slats).toHaveLength(8 * 3);
     expect(m.floors[1]!.slats).toHaveLength(0);
   });

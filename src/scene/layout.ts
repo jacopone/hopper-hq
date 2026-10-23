@@ -21,6 +21,8 @@ export const INTERNS_MAX = 3;
 export const RUNS_SHOWN = 5;
 /** Agents a room lists. */
 export const MEETING_AGENTS_MAX = 24;
+/** Agent windows a floor lights on the façade; it counts the rest. */
+export const AGENT_WINDOWS_MAX = 6;
 /** Unseated sessions a floor lists; it counts the rest. */
 export const UNSEATED_MAX = 24;
 /** Desks in a pod (2x2, back to back) and in a block (two pods side by side). */

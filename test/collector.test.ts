@@ -9,7 +9,7 @@ import { Collector } from '../src/collector.js';
 import { newSession } from '../src/core/reducer.js';
 import type { RawEvent, Session } from '../src/core/types.js';
 import { emptySeating, parseSeating } from '../src/scene/seating.js';
-import type { FloorDetail } from '../src/scene/types.js';
+import { SCENE_VERSION, type FloorDetail } from '../src/scene/types.js';
 import { SceneHub } from '../src/server/events.js';
 import { Store } from '../src/store/store.js';
 
@@ -67,7 +67,7 @@ describe('the Lobby', () => {
     c.setLobby({ ...lobby });
     expect(told).toBe(1);
     expect(c.scene().lobby).toEqual({ doorman: 'Gordon', refused: 0, ready: 0, seatsFull: 0, memory: null, held: false, paused: 0, queue: [], queueMore: 0, updatedAt: NOW });
-    expect(c.lobbyDetail()).toMatchObject({ version: 9, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
+    expect(c.lobbyDetail()).toMatchObject({ version: SCENE_VERSION, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
     await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, tmuxPane: 'wK:p2' }));
     expect([...c.localPanes()]).toEqual([['S1', 'wK:p2']]);
   });
