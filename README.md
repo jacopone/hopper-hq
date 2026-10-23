@@ -106,6 +106,16 @@ This already works from the files Claude Code writes, without the mod.
 
 The façade has one floor per feature: the branch, shared by every repository working on it. A team whose branches name tasks rather than features, one session each, gets a tall building of small floors. `--floors repo` gives each repository one floor instead: every session sits in its repository's department, and each checkout, the main one or a worktree, keeps its own pod, with the branch on its placard. `HOPPER_HQ_FLOORS=repo` says the same for a daemon started by a service. The default stays `feature`.
 
+### One floor per project folder
+
+`--floors folder` (`HOPPER_HQ_FLOORS=folder`) gives each project folder one floor, read from the session's working directory, whether it is a repository or not:
+
+- the folder right under the home: `~/tenuta` and `~/tenuta/controllo-gestione` are one floor, `tenuta`; `~/nixos-config/.worktrees/x` is on `nixos-config`;
+- under a container folder, the folder one level further down: `~/amatino/amatino-app` and `~/amatino/amatino-crm` are two floors, and `~/amatino/amatino-app/.claude/worktrees/x` is on `amatino-app`. A session in the container folder itself has its own floor;
+- the home itself is the floor `~`, and every session outside the home is on one floor, `other`.
+
+`HOPPER_HQ_FLOOR_CONTAINERS` lists the container folders, separated as `PATH` is, a leading `~` for the home; it defaults to `~/amatino:~/experiments:~/tools`. As in repo mode, no branch makes a feature, and each checkout keeps its own pod.
+
 A branch Claude Code made for a worktree (`worktree-<name>`) never makes a feature, in either mode.
 
 ### Several accounts on one machine
@@ -316,7 +326,7 @@ Each summary is one call to the model, a small one by default. A session gets at
 | --- | --- |
 | `hopper-hq up` | Starts the daemon in the background unless it is running, then opens the building like `ui`. Use `--no-open` to print the link only. |
 | `hopper-hq down` | Stops the daemon. |
-| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository); `--terminal auto|tmux|herdr` picks the [terminal](#herdr) Go switches; `--gatekeeper gordon` shows [the Lobby](#the-lobby). |
+| `hopper-hq start` | Runs the daemon in the foreground: collector, file watcher and local API. One daemon runs per data directory. `--claude-dir DIR[=LABEL]`, once per config directory, watches [several accounts](#several-accounts-on-one-machine); `--floors repo` gives [each repository a floor](#one-floor-per-repository), `--floors folder` [each project folder](#one-floor-per-project-folder); `--terminal auto|tmux|herdr` picks the [terminal](#herdr) Go switches; `--gatekeeper gordon` shows [the Lobby](#the-lobby). |
 | `hopper-hq status` | Prints a summary. Use `--format text`, `tmux` or `json`. |
 | `hopper-hq ls` | Lists floors and their sessions. |
 | `hopper-hq ack` | Marks finished sessions as seen. |
