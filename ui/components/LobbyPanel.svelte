@@ -64,8 +64,9 @@
     else if (s.stale) parts.push('stale');
     return parts.join(' · ');
   };
-  /** 912, 98.0k, 4.56M. */
-  const tok = (n: number) => (n < 1000 ? `${n}` : n < 99_950 ? `${(n / 1000).toFixed(1)}k` : n < 999_500 ? `${(n / 1000).toFixed(0)}k` : `${(n / 1_000_000).toFixed(2)}M`);
+  /** 912, 98.0k, 4.56M, 1.86B. */
+  const tok = (n: number) =>
+    n < 1000 ? `${n}` : n < 99_950 ? `${(n / 1000).toFixed(1)}k` : n < 999_500 ? `${(n / 1000).toFixed(0)}k` : n < 999_995_000 ? `${(n / 1e6).toFixed(2)}M` : `${(n / 1e9).toFixed(2)}B`;
   const usd = (n: number) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
   const rate = (n: number) => `$${n}`;
   type Tally = NonNullable<LobbyDetail['usage']>['total'];

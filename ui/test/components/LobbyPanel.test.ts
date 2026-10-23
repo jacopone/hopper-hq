@@ -274,14 +274,21 @@ describe('LobbyPanel', () => {
     expect(text(untouched.querySelector('.seat-week'))).toBe('week untouched · 10% of it gone · 10 points under the line · read 1m ago');
   });
 
-  it('rounds token counts without a 100.0k or a 1000k, and puts a week at its pace on the line', () => {
+  it('rounds token counts without a 100.0k, a 1000k or a 1000M, and puts a week at its pace on the line', () => {
     const at = (n: number) => panel({ ...detail, usage: { ...detail.usage!, total: { ...detail.usage!.total, tokens: { input: n, cacheWrite: 0, cacheRead: 0, output: 0 }, unpricedTokens: 0, counting: false } } }).section('Tokens at list price');
     const shown = (n: number) => {
       const t = text(at(n).querySelector('.usage-total'));
       cleanup();
       return t;
     };
-    expect([99_949, 99_950, 999_499, 999_500].map(shown)).toEqual(['In the building: 99.9k tokens · $7.81', 'In the building: 100k tokens · $7.81', 'In the building: 999k tokens · $7.81', 'In the building: 1.00M tokens · $7.81']);
+    expect([99_949, 99_950, 999_499, 999_500, 999_994_999, 1_857_120_000].map(shown)).toEqual([
+      'In the building: 99.9k tokens · $7.81',
+      'In the building: 100k tokens · $7.81',
+      'In the building: 999k tokens · $7.81',
+      'In the building: 1.00M tokens · $7.81',
+      'In the building: 999.99M tokens · $7.81',
+      'In the building: 1.86B tokens · $7.81',
+    ]);
     const level = panel({ ...detail, seats: [{ ...detail.seats[0]!, weekPace: { elapsedPct: 41, aheadPct: 0 } }] }).section('Seats');
     expect(text(level.querySelector('.seat-week'))).toBe('week touched · 41% of it gone · on the line · read 1m ago');
   });
