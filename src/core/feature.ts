@@ -1,3 +1,5 @@
+import type { FolderRules } from './folder.js';
+
 export interface FeatureRules {
   /** Compared case-insensitively. Sessions on these branches have no feature. */
   trunkBranches: string[];
@@ -5,6 +7,8 @@ export interface FeatureRules {
   generatedBranches: RegExp[];
   /** First capture group is the ticket id. */
   ticketPatterns: RegExp[];
+  /** Floors by project folder: the folders a session's floor is read from. Absent in the other modes. */
+  folders?: FolderRules;
 }
 
 export const DEFAULT_FEATURE_RULES: FeatureRules = {
@@ -13,16 +17,20 @@ export const DEFAULT_FEATURE_RULES: FeatureRules = {
   ticketPatterns: [/\b([A-Z][A-Z0-9]{1,9}-\d+)\b/, /\b(CU-[a-z0-9]{4,})\b/i],
 };
 
-/** Which floors the building has: one per feature (branch, across repositories), or one per repository. */
-export type FloorMode = 'feature' | 'repo';
+/** Which floors the building has: one per feature (branch, across repositories), one per repository, or one per project folder. */
+export type FloorMode = 'feature' | 'repo' | 'folder';
 
-export const FLOOR_MODES: readonly FloorMode[] = ['feature', 'repo'];
+export const FLOOR_MODES: readonly FloorMode[] = ['feature', 'repo', 'folder'];
 
 /** Floors by repository: no branch makes a feature, so every session sits in its repository's department, its checkout its pod. */
 export const REPO_FLOOR_RULES: FeatureRules = { ...DEFAULT_FEATURE_RULES, generatedBranches: [/^/] };
 
-/** The rules for a floor mode. */
-export function rulesFor(mode: FloorMode): FeatureRules {
+/** No home and no container: in folder mode without folders, every session is on the floor outside the home. */
+const NO_FOLDERS: FolderRules = { home: '/', containers: [] };
+
+/** The rules for a floor mode. Folder mode reads its floors from `folders`; as in repo mode, no branch makes a feature. */
+export function rulesFor(mode: FloorMode, folders: FolderRules = NO_FOLDERS): FeatureRules {
+  if (mode === 'folder') return { ...REPO_FLOOR_RULES, folders };
   return mode === 'repo' ? REPO_FLOOR_RULES : DEFAULT_FEATURE_RULES;
 }
 

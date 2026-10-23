@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
-import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolveFloorMode, resolveGatekeeper, resolvePaths } from '../src/config.js';
+import { DEFAULT_PORT, DEFAULT_THRESHOLDS, parseClaudeDir, resolveFloorMode, resolveFolderRules, resolveGatekeeper, resolvePaths } from '../src/config.js';
 
 describe('parseClaudeDir', () => {
   it('reads a directory, and a label after the last "="', () => {
@@ -63,6 +63,15 @@ describe('resolveFloorMode', () => {
     expect(resolveFloorMode(undefined, { HOPPER_HQ_FLOORS: 'repo' })).toBe('repo');
     expect(resolveFloorMode(undefined, {})).toBe('feature');
     expect(() => resolveFloorMode('branch', {})).toThrow(/Unknown floor mode: branch/);
+    expect(resolveFloorMode(undefined, { HOPPER_HQ_FLOORS: 'folder' })).toBe('folder');
+  });
+});
+
+describe('resolveFolderRules', () => {
+  it('reads the container folders from HOPPER_HQ_FLOOR_CONTAINERS, a leading ~ for the home, else ~/amatino, ~/experiments and ~/tools', () => {
+    expect(resolveFolderRules({}, '/home/j')).toEqual({ home: '/home/j', containers: ['/home/j/amatino', '/home/j/experiments', '/home/j/tools'] });
+    expect(resolveFolderRules({ HOPPER_HQ_FLOOR_CONTAINERS: ['~/work', '/srv/repos/', '', '~'].join(delimiter) }, '/home/j')).toEqual({ home: '/home/j', containers: ['/home/j/work', '/srv/repos', '/home/j'] });
+    expect(resolveFolderRules({ HOPPER_HQ_FLOOR_CONTAINERS: '' }, '/home/j').containers).toEqual([]);
   });
 });
 
