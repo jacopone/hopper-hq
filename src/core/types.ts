@@ -1,6 +1,14 @@
 /** The terminal multiplexer the sessions run in: it names the panes, and Go reaches a session through it. */
 export type TerminalKind = 'tmux' | 'herdr';
 
+/** Tokens by kind, as the replies of a transcript report them; the cache writes of both lifetimes together. */
+export interface Tokens {
+  input: number;
+  cacheWrite: number;
+  cacheRead: number;
+  output: number;
+}
+
 /** One reading of an account's allowance window. */
 export interface Allowance {
   usedPct: number;

@@ -40,6 +40,18 @@ const detail: LobbyDetail = {
   limits: { memMinGb: 20, loadPerThread: 0.75, diskBusyPct: 60, psiMemPct: 10, slicePct: 75, brakeMhz: 1000 },
   capacity: { plan: 'tetto 7, al lavoro 6, liberi 1 · macchina ASPETTA · in fila 3 (1 rifiutate, 2 pronte)', byCap: 1, bySeats: 0, slotsFree: 0, binds: 'seats', nextReset: { at: NOW + 2 * 3_600_000, seat: 'Luca' } },
   seatLimitPct: 80,
+  usage: {
+    prices: { source: 'https://platform.claude.com/docs/en/about-claude/pricing', readAt: '2026-10-23', currency: 'USD', unit: 'per million tokens', rates: [{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', input: 4, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2, output: 20 }] },
+    sessions: [
+      { sessionId: 'S1', name: 'pr-medic 1', account: 'luca@amatino.ai', org: 'amatino', task: 'G-178', models: ['claude-opus-5-5'], tokens: { input: 1200, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_000 }, costUsd: 7.81, unpricedTokens: 0, counting: false },
+      { sessionId: 'S2', name: 'pr-medic 2', account: null, org: null, task: null, models: ['claude-opus-5-5'], tokens: { input: 12, cacheWrite: 0, cacheRead: 0, output: 900 }, costUsd: 0.004, unpricedTokens: 0, counting: true },
+    ],
+    seats: [
+      { account: 'luca@amatino.ai', org: 'amatino', sessions: 1, tokens: { input: 1200, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_000 }, costUsd: 7.81, unpricedTokens: 0, counting: false },
+      { account: 'unknown', org: null, sessions: 1, tokens: { input: 12, cacheWrite: 0, cacheRead: 0, output: 900 }, costUsd: 0.004, unpricedTokens: 0, counting: true },
+    ],
+    total: { tokens: { input: 1212, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_900 }, costUsd: 7.814, unpricedTokens: 3400, counting: true },
+  },
   updatedAt: NOW - 12_000,
 };
 
@@ -258,6 +270,20 @@ describe('LobbyPanel', () => {
   it('names the weekly limits it reads: all models, and Fable, which no reading carries', () => {
     const seats = section0('Seats');
     expect(text(seats.querySelector('.week-limits'))).toBe('Bars: 5h, then 7d all models · Fable: not read');
+  });
+
+  it("prices the sessions' tokens at list price, says it is not billed, and names the page, the day and the unit of the rates", () => {
+    const u = section0('Tokens at list price');
+    expect(text(u.querySelector('.usage-note'))).toBe('List price, not billed: the seats are subscriptions. Rates read 2026-10-23 from platform.claude.com, USD per million tokens.');
+    expect(text(u.querySelector('.usage-total'))).toBe('In the building: 5.00M tokens · $7.81 · 3.4k tokens of a model with no price · counting…');
+    expect([...u.querySelectorAll('.usage-seats li')].map(text)).toEqual(['luca@amatino.ai · 1 session · 5.00M tokens · $7.81', 'unknown · 1 session · 912 tokens · <$0.01 · counting…']);
+    expect([...u.querySelectorAll('.usage-sessions li')].map(text)).toEqual([
+      'pr-medic 1 · G-178 · in 1.2k · write 340k · read 4.56M · out 98.0k · $7.81',
+      'pr-medic 2 · in 12 · write 0 · read 0 · out 900 · <$0.01 · counting…',
+    ]);
+    expect([...u.querySelectorAll('.rates li')].map(text)).toEqual(['Claude Opus 5.5 · in $4 · 5m write $5 · 1h write $8 · read $0.2 · out $20']);
+    cleanup();
+    expect(text(panel({ ...detail, usage: null }).section('Tokens at list price').querySelector('.p-note'))).toBe('The building does not meter its sessions.');
   });
 
   it('draws each seat\'s two windows as bars', () => {

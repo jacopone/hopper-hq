@@ -4,7 +4,7 @@
  * Grid: integer cells; x grows east, y grows south. The renderer maps cells to world units.
  */
 import type { Org } from './palette.js';
-import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting, WaitingKind } from '../core/types.js';
+import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, Tokens, WaitKind, Waiting, WaitingKind } from '../core/types.js';
 
 export const SCENE_VERSION = 9;
 
@@ -172,6 +172,53 @@ export interface TaskCard {
   subagents: number;
 }
 
+/** What a share of the building used: tokens by kind and their list price; the tokens of a model with no price apart. */
+export interface UsageTally {
+  tokens: Tokens;
+  /** USD at list price of the priced tokens: not what anyone is billed. */
+  costUsd: number;
+  unpricedTokens: number;
+  /** A transcript is not read whole yet: the figures will grow. */
+  counting: boolean;
+}
+
+export interface SessionUsageView extends UsageTally {
+  sessionId: string;
+  name: string;
+  account: string | null;
+  org: Org | null;
+  task: string | null;
+  /** The models of its replies, as the transcript names them. */
+  models: string[];
+}
+
+export interface SeatUsageView extends UsageTally {
+  account: string;
+  org: Org | null;
+  sessions: number;
+}
+
+/** A model's rates in USD per million tokens. */
+export interface RateRow {
+  model: string;
+  label: string;
+  input: number;
+  cacheWrite5m: number;
+  cacheWrite1h: number;
+  cacheRead: number;
+  output: number;
+}
+
+/** The tokens of the sessions in the building and their list price, by session and by account, with the rates they were priced at. */
+export interface UsageDetail {
+  prices: { source: string; readAt: string; currency: string; unit: string; rates: RateRow[] };
+  /** The dearest first. */
+  sessions: SessionUsageView[];
+  /** The dearest first; the sessions without an account under 'unknown'. */
+  seats: SeatUsageView[];
+  total: UsageTally;
+}
+
 /** The Lobby in detail: the gatekeeper's Lobby, cleaned, with the paused panes resolved to sessions. */
 export interface LobbyDetail {
   version: typeof SCENE_VERSION;
@@ -191,6 +238,8 @@ export interface LobbyDetail {
   capacity: Capacity;
   /** A seat is full at this percentage of either window. */
   seatLimitPct: number;
+  /** The sessions' tokens at list price; null when the building does not meter them. */
+  usage: UsageDetail | null;
   updatedAt: number;
 }
 

@@ -266,3 +266,31 @@ describe("the board of Gordon's tasks", () => {
     expect(d.tasks[0]!.title).toBe('xy');
   });
 });
+
+describe("the sessions' tokens at list price", () => {
+  const tally = (output: number, costUsd: number, extra: Record<string, unknown> = {}) => ({ tokens: { input: 1, cacheWrite: 2, cacheRead: 3, output }, costUsd, unpricedTokens: 0, models: ['claude-opus-5-5'], replies: 1, done: true, ...extra });
+  const at = (id: string, account: string | null, task: string | null = null) => toView({ ...newSession(id, NOW, ws), name: `${id}\u0007 name`, account, task }, NOW);
+
+  it('is null when the building does not meter its sessions', () => {
+    expect(buildLobbyDetail(lobby, views, NOW).usage).toBeNull();
+  });
+
+  it('lists each metered session in the building, the dearest first, and sums them by account and in all', () => {
+    const vs = [at('A', 'luca@amatino.ai', 'G-1'), at('B', 'luca@amatino.ai'), at('C', null)];
+    const usage = new Map([['A', { main: tally(10, 1.5) }], ['B', { main: tally(20, 3, { done: false }) }], ['C', { main: tally(5, 0.25, { unpricedTokens: 7 }) }], ['Z', { main: tally(99, 99) }]]);
+    const u = buildLobbyDetail(lobby, vs, NOW, usage).usage!;
+    expect(u.sessions.map((s) => [s.sessionId, s.name, s.account, s.org, s.task, s.costUsd, s.counting])).toEqual([
+      ['B', 'B name', 'luca@amatino.ai', 'amatino', null, 3, true],
+      ['A', 'A name', 'luca@amatino.ai', 'amatino', 'G-1', 1.5, false],
+      ['C', 'C name', null, null, null, 0.25, false],
+    ]);
+    expect(u.seats.map((s) => [s.account, s.sessions, s.costUsd, s.tokens.output, s.counting])).toEqual([['luca@amatino.ai', 2, 4.5, 30, true], ['unknown', 1, 0.25, 5, false]]);
+    expect(u.total).toEqual({ tokens: { input: 3, cacheWrite: 6, cacheRead: 9, output: 35 }, costUsd: 4.75, unpricedTokens: 7, counting: true });
+  });
+
+  it('names the page the rates were read from, the day and the unit, with the rates of the models in use only', () => {
+    const u = buildLobbyDetail(lobby, [at('A', null)], NOW, new Map([['A', { main: tally(1, 1, { models: ['claude-opus-5-5', 'claude-opus-9-9'] }) }]])).usage!;
+    expect(u.prices).toMatchObject({ source: 'https://platform.claude.com/docs/en/about-claude/pricing', readAt: '2026-10-23', currency: 'USD', unit: 'per million tokens' });
+    expect(u.prices.rates).toEqual([{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', input: 4, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2, output: 20 }]);
+  });
+});

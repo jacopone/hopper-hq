@@ -64,6 +64,15 @@
     else if (s.stale) parts.push('stale');
     return parts.join(' · ');
   };
+  /** 912, 98.0k, 4.56M. */
+  const tok = (n: number) => (n < 1000 ? `${n}` : n < 1_000_000 ? `${(n / 1000).toFixed(n < 100_000 ? 1 : 0)}k` : `${(n / 1_000_000).toFixed(2)}M`);
+  const usd = (n: number) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
+  const rate = (n: number) => `$${n}`;
+  type Tally = NonNullable<LobbyDetail['usage']>['total'];
+  const sumOf = (t: Tally) => t.tokens.input + t.tokens.cacheWrite + t.tokens.cacheRead + t.tokens.output;
+  const counting = (t: Tally) => (t.counting ? ' · counting…' : '');
+  /** The sessions listed by name; the rest are counted in the totals. */
+  const USAGE_SHOWN = 12;
   const gauge = (p: NonNullable<LobbyDetail['power']>) =>
     `${gib(p.usedBytes)} / ${p.maxBytes === null ? 'no cap' : `${gib(p.maxBytes)} GiB (${pct(p.usedBytes, p.maxBytes)}%)`} · mark ${p.warnPct}%`;
   const pausedLabel = (p: PausedSession) => `${p.name ?? 'a session'} (${p.pane})`;
@@ -281,6 +290,36 @@
     {#if lobby.turnTo}<p class="turn">Turn → {lobby.turnTo}</p>{/if}
   </section>
   <section>
+    <h3 class="p-h3">Tokens at list price</h3>
+    {#if lobby.usage}
+      {@const u = lobby.usage}
+      <p class="usage-note p-note">List price, not billed: the seats are subscriptions. Rates read {u.prices.readAt} from platform.claude.com, {u.prices.currency} {u.prices.unit}.</p>
+      <p class="usage-total">In the building: {tok(sumOf(u.total))} tokens · {usd(u.total.costUsd)}{u.total.unpricedTokens > 0 ? ` · ${tok(u.total.unpricedTokens)} tokens of a model with no price` : ''}{counting(u.total)}</p>
+      {#if u.seats.length > 0}
+        <ul class="list usage-seats">
+          {#each u.seats as s (s.account)}
+            <li>{#if s.org}<i class="chip org-{s.org}" title={ORG_LABEL[s.org]} data-letter={ORG_LETTER[s.org]}></i>{/if}{s.account} · {plural(s.sessions, 'session', 'sessions')} · {tok(sumOf(s))} tokens · {usd(s.costUsd)}{counting(s)}</li>
+          {/each}
+        </ul>
+        <ul class="list usage-sessions">
+          {#each u.sessions.slice(0, USAGE_SHOWN) as s (s.sessionId)}
+            <li>{s.name}{s.task ? ` · ${s.task}` : ''} · in {tok(s.tokens.input)} · write {tok(s.tokens.cacheWrite)} · read {tok(s.tokens.cacheRead)} · out {tok(s.tokens.output)} · {usd(s.costUsd)}{counting(s)}</li>
+          {/each}
+        </ul>
+        {#if u.sessions.length > USAGE_SHOWN}<p class="p-note">{plural(u.sessions.length - USAGE_SHOWN, 'more session', 'more sessions')} in the totals.</p>{/if}
+      {/if}
+      {#if u.prices.rates.length > 0}
+        <ul class="list rates">
+          {#each u.prices.rates as r (r.model)}
+            <li>{r.label} · in {rate(r.input)} · 5m write {rate(r.cacheWrite5m)} · 1h write {rate(r.cacheWrite1h)} · read {rate(r.cacheRead)} · out {rate(r.output)}</li>
+          {/each}
+        </ul>
+      {/if}
+    {:else}
+      <p class="p-note">The building does not meter its sessions.</p>
+    {/if}
+  </section>
+  <section>
     <h3 class="p-h3">Session memory</h3>
     {#if lobby.power}
       <Bar pct={powerPct} marks={powerMarks} over={powerPct !== null && powerPct >= lobby.power.warnPct} />
@@ -365,6 +404,9 @@
   .gauge.over .g-value { color: var(--needs-ink); font-weight: 500; }
   .chip { display: inline-block; margin: 8px 0 0; padding: 1px 8px; border-radius: 10px; background: var(--hover); color: var(--needs-ink); font-size: 12px; }
   .seats li { display: grid; gap: 3px; }
+  .usage-total { margin: 4px 0; font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
+  .usage-sessions, .rates { margin-top: 6px; font-size: 11.5px; }
+  .rates { color: var(--muted); }
   .seat-week { font-size: 11.5px; color: var(--muted); }
   .seat-week.old { font-style: italic; }
   .seat-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

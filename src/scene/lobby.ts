@@ -1,10 +1,12 @@
 import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
 import { byCodeUnit, repoRootOf } from '../core/view.js';
-import type { Allowance, Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
+import type { Allowance, Capacity, GateVerdict, Lobby, Seat, Tokens, Waiting } from '../core/types.js';
+import type { SessionUsage, Tally } from '../usage/meter.js';
+import { modelKey, PRICES } from '../usage/prices.js';
 import type { SessionView } from '../core/view.js';
 import { FEATURE_SLOTS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from './palette.js';
 import { cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
-import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard, type WeekPace } from './types.js';
+import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard, type UsageDetail, type UsageTally, type WeekPace } from './types.js';
 
 /**
  * The colour slot of each repository the building has a floor for (a live session works in it), by its lower-case name.
@@ -187,8 +189,45 @@ function boardOf(l: Lobby, views: readonly SessionView[]): TaskCard[] {
   return [...waiting, ...live];
 }
 
+const NO_TOKENS: Tokens = { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 };
+const tallyOf = (t: Tally & { done: boolean }): UsageTally => ({ tokens: { ...t.tokens }, costUsd: t.costUsd, unpricedTokens: t.unpricedTokens, counting: !t.done });
+function sumTallies(ts: readonly UsageTally[]): UsageTally {
+  return ts.reduce<UsageTally>(
+    (a, t) => ({
+      tokens: { input: a.tokens.input + t.tokens.input, cacheWrite: a.tokens.cacheWrite + t.tokens.cacheWrite, cacheRead: a.tokens.cacheRead + t.tokens.cacheRead, output: a.tokens.output + t.tokens.output },
+      costUsd: a.costUsd + t.costUsd,
+      unpricedTokens: a.unpricedTokens + t.unpricedTokens,
+      counting: a.counting || t.counting,
+    }),
+    { tokens: NO_TOKENS, costUsd: 0, unpricedTokens: 0, counting: false },
+  );
+}
+
+/** The metered sessions in the building, the dearest first, summed by account and in all; the rates of the models they use. */
+function usageDetail(views: readonly SessionView[], usage: ReadonlyMap<string, SessionUsage>): UsageDetail {
+  const sessions = views
+    .filter((v) => v.effectiveState !== 'ended' && usage.has(v.id))
+    .map((v) => {
+      const u = usage.get(v.id)!;
+      const account = cleanOrNull(v.account);
+      return { ...tallyOf(u.main), sessionId: cleanText(v.id, KEY_MAX), name: cleanOrNull(v.name, 60) ?? cleanText(v.id.slice(0, 8)), account, org: orgOfAccount(account), task: cleanOrNull(v.task, 64), models: u.main.models.map((m) => cleanText(m, 60)) };
+    })
+    .sort((a, b) => b.costUsd - a.costUsd || byCodeUnit(a.sessionId, b.sessionId));
+  const byAccount = new Map<string, typeof sessions>();
+  for (const s of sessions) byAccount.set(s.account ?? 'unknown', [...(byAccount.get(s.account ?? 'unknown') ?? []), s]);
+  const seats = [...byAccount]
+    .map(([account, ss]) => ({ ...sumTallies(ss), account, org: account === 'unknown' ? null : orgOfAccount(account), sessions: ss.length }))
+    .sort((a, b) => b.costUsd - a.costUsd || byCodeUnit(a.account, b.account));
+  const keys = [...new Set(sessions.flatMap((s) => s.models.map((m) => modelKey(m)).filter((k): k is string => k !== null)))].sort();
+  const rates = keys.map((model) => {
+    const p = PRICES.models[model]!;
+    return { model, label: p.label, input: p.input, cacheWrite5m: p.cacheWrite5m, cacheWrite1h: p.cacheWrite1h, cacheRead: p.cacheRead, output: p.output };
+  });
+  return { prices: { source: PRICES.source, readAt: PRICES.readAt, currency: PRICES.currency, unit: PRICES.unit, rates }, sessions, seats, total: sumTallies(sessions) };
+}
+
 /** The Lobby in detail, every string cleaned, the doorman's own session found by its name. */
-export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = Date.now()): LobbyDetail {
+export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = Date.now(), usage: ReadonlyMap<string, SessionUsage> | null = null): LobbyDetail {
   const doorman = views.find((v) => v.effectiveState !== 'ended' && v.name?.toLowerCase() === l.doorman.name.toLowerCase());
   return {
     version: SCENE_VERSION,
@@ -204,6 +243,7 @@ export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = 
     limits: l.limits,
     capacity: capacityDetail(capacityOf(l, now)),
     seatLimitPct: SEAT_LIMIT_PCT,
+    usage: usage && usageDetail(views, usage),
     updatedAt: l.updatedAt,
   };
 }
