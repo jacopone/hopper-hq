@@ -131,6 +131,36 @@ describe('buildLobbySummary', () => {
     expect(d.seats.map((s) => s.org)).toEqual(['amatino', 'tenuta', null]);
   });
 
+  describe("a seat's week against time", () => {
+    const DAY = 86_400_000;
+    const seat = (week: { usedPct: number; resetsAt: number | null; readAt: number } | null, session: { usedPct: number; resetsAt: number | null; readAt: number } | null = null) => ({ ...lobby.seats[0]!, session, week });
+    const one = (s: ReturnType<typeof seat>) => buildLobbyDetail({ ...lobby, seats: [s] }, views, NOW).seats[0]!;
+
+    it('sets the share used against a straight line to the reset: the window opened seven days before it', () => {
+      // Three and a half days left of seven: half the week has gone by; 61% used is 11 points ahead of the line.
+      expect(one(seat({ usedPct: 61, resetsAt: NOW + 3.5 * DAY, readAt: NOW })).weekPace).toEqual({ elapsedPct: 50, aheadPct: 11 });
+      expect(one(seat({ usedPct: 5, resetsAt: NOW + 6 * DAY, readAt: NOW })).weekPace).toEqual({ elapsedPct: 14, aheadPct: -9 });
+    });
+
+    it('has no pace without a reset, once the reset has passed, or without a reading', () => {
+      expect(one(seat({ usedPct: 30, resetsAt: null, readAt: NOW })).weekPace).toBeNull();
+      expect(one(seat({ usedPct: 0, resetsAt: NOW - 1000, readAt: NOW - 2 * DAY })).weekPace).toBeNull();
+      expect(one(seat(null)).weekPace).toBeNull();
+    });
+
+    it('says the week is touched when any of it is used, full or not', () => {
+      expect(one(seat({ usedPct: 1, resetsAt: NOW + DAY, readAt: NOW })).weekTouched).toBe(true);
+      expect(one(seat({ usedPct: 0, resetsAt: NOW + DAY, readAt: NOW })).weekTouched).toBe(false);
+      expect(one(seat(null)).weekTouched).toBe(false);
+    });
+
+    it('carries the age of the newest reading, and none when no reading dates itself', () => {
+      expect(one(seat({ usedPct: 16, resetsAt: NOW + DAY, readAt: NOW - 4 * DAY }, { usedPct: 3, resetsAt: null, readAt: NOW - 4 * DAY })).readAgeMs).toBe(4 * DAY);
+      expect(one(seat({ usedPct: 16, resetsAt: NOW + DAY, readAt: 0 })).readAgeMs).toBeNull();
+      expect(one(seat(null)).readAgeMs).toBeNull();
+    });
+  });
+
   it('keeps the memory percentage within 0 and 100', () => {
     expect(buildLobbySummary({ ...lobby, power: { ...lobby.power!, usedBytes: 80_000_000_000 } }, views).memory!.pct).toBe(100);
   });

@@ -52,6 +52,18 @@
     !s.session && !s.week
       ? `${s.name} no fresh reading`
       : `${s.name} 5h ${s.session ? `${Math.round(s.session.usedPct)}%` : '–'} · 7d ${s.week ? `${Math.round(s.week.usedPct)}%` : '–'}${s.full ? ' · full' : ''}${s.stale ? ' · stale' : ''}`;
+  /** The week against a straight line to its reset, whether any of it is used, and how old the reading is: an old one says so. */
+  const weekLine = (s: SeatRow) => {
+    if (!s.session && !s.week) return 'no reading';
+    const parts = [s.weekTouched ? 'week touched' : 'week untouched'];
+    if (s.weekPace) {
+      const a = s.weekPace.aheadPct;
+      parts.push(`${s.weekPace.elapsedPct}% of it gone`, `${Math.abs(a)} points ${a > 0 ? 'over' : 'under'} the line`);
+    } else parts.push('reset not known');
+    if (s.readAgeMs !== null) parts.push(`read ${formatAgo(s.readAgeMs)} ago${s.stale ? ', stale' : ''}`);
+    else if (s.stale) parts.push('stale');
+    return parts.join(' · ');
+  };
   const gauge = (p: NonNullable<LobbyDetail['power']>) =>
     `${gib(p.usedBytes)} / ${p.maxBytes === null ? 'no cap' : `${gib(p.maxBytes)} GiB (${pct(p.usedBytes, p.maxBytes)}%)`} · mark ${p.warnPct}%`;
   const pausedLabel = (p: PausedSession) => `${p.name ?? 'a session'} (${p.pane})`;
@@ -255,14 +267,17 @@
     <ul class="list seats">
       {#each lobby.seats as s (s.account)}
         <li class:full={s.full} class:stale={s.stale} class:current={s.current}>
-          <span>{s.current ? '▸ ' : ''}{#if s.org}<i class="chip org-{s.org}" title={ORG_LABEL[s.org]} data-letter={ORG_LETTER[s.org]}></i>{/if}{seatLine(s)}</span>
+          <span class="seat-line">{s.current ? '▸ ' : ''}{#if s.org}<i class="chip org-{s.org}" title={ORG_LABEL[s.org]} data-letter={ORG_LETTER[s.org]}></i>{/if}{seatLine(s)}</span>
           <span class="seat-bars">
             <Bar pct={s.session ? s.session.usedPct : null} over={s.session !== null && s.session.usedPct >= lobby.seatLimitPct} stale={s.stale} marks={[{ at: lobby.seatLimitPct, label: `full at ${lobby.seatLimitPct}%` }]} />
             <Bar pct={s.week ? s.week.usedPct : null} over={s.week !== null && s.week.usedPct >= lobby.seatLimitPct} stale={s.stale} marks={[{ at: lobby.seatLimitPct, label: `full at ${lobby.seatLimitPct}%` }]} />
           </span>
+          <span class="seat-week" class:old={s.stale}>{weekLine(s)}</span>
         </li>
       {/each}
     </ul>
+    <!-- The status line writes the five-hour and the all-models week; the Fable week is in no reading. -->
+    <p class="week-limits p-note">Bars: 5h, then 7d all models · Fable: not read</p>
     {#if lobby.turnTo}<p class="turn">Turn → {lobby.turnTo}</p>{/if}
   </section>
   <section>
@@ -350,5 +365,7 @@
   .gauge.over .g-value { color: var(--needs-ink); font-weight: 500; }
   .chip { display: inline-block; margin: 8px 0 0; padding: 1px 8px; border-radius: 10px; background: var(--hover); color: var(--needs-ink); font-size: 12px; }
   .seats li { display: grid; gap: 3px; }
+  .seat-week { font-size: 11.5px; color: var(--muted); }
+  .seat-week.old { font-style: italic; }
   .seat-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 </style>

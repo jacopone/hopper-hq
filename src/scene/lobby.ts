@@ -1,10 +1,10 @@
 import { capacityOf, SEAT_LIMIT_PCT } from '../core/lobby.js';
 import { byCodeUnit, repoRootOf } from '../core/view.js';
-import type { Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
+import type { Allowance, Capacity, GateVerdict, Lobby, Seat, Waiting } from '../core/types.js';
 import type { SessionView } from '../core/view.js';
 import { FEATURE_SLOTS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from './palette.js';
 import { cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
-import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard } from './types.js';
+import { QUEUE_MAX, SCENE_VERSION, type LobbyDetail, type LobbySummary, type PausedSession, type QueueSlot, type SeatView, type ShownState, type TaskCard, type WeekPace } from './types.js';
 
 /**
  * The colour slot of each repository the building has a floor for (a live session works in it), by its lower-case name.
@@ -104,7 +104,30 @@ const capacityDetail = (c: Capacity): Capacity => ({
   nextReset: c.nextReset && { at: c.nextReset.at, seat: cleanText(c.nextReset.seat, 40) },
 });
 
-const seatOf = (s: Seat): SeatView => ({ ...s, account: cleanText(s.account), name: cleanText(s.name, 40), org: orgOfAccount(cleanText(s.account)) });
+const WEEK_MS = 7 * 86_400_000;
+
+/** The week's use against a straight line from its opening, seven days before its reset, to the reset. */
+function weekPaceOf(week: Allowance | null, now: number): WeekPace | null {
+  if (!week || week.resetsAt === null || week.resetsAt <= now) return null;
+  const elapsed = Math.max(0, Math.min(100, ((WEEK_MS - (week.resetsAt - now)) / WEEK_MS) * 100));
+  return { elapsedPct: Math.round(elapsed), aheadPct: Math.round(week.usedPct - elapsed) };
+}
+
+/** The age of the newest reading of either window; a reading written at 0 does not date itself. */
+function readAgeOf(s: Seat, now: number): number | null {
+  const at = Math.max(s.session?.readAt ?? 0, s.week?.readAt ?? 0);
+  return at > 0 ? Math.max(0, now - at) : null;
+}
+
+const seatOf = (s: Seat, now: number): SeatView => ({
+  ...s,
+  account: cleanText(s.account),
+  name: cleanText(s.name, 40),
+  org: orgOfAccount(cleanText(s.account)),
+  weekPace: weekPaceOf(s.week, now),
+  weekTouched: (s.week?.usedPct ?? 0) > 0,
+  readAgeMs: readAgeOf(s, now),
+});
 
 /** The paused panes, each with the live session in it when the building knows one. */
 function pausedOf(panes: readonly string[], views: readonly SessionView[]): PausedSession[] {
@@ -173,7 +196,7 @@ export function buildLobbyDetail(l: Lobby, views: readonly SessionView[], now = 
     gate: gateOf(l.gate),
     queue: l.queue.map(waitingOf),
     tasks: boardOf(l, views),
-    seats: l.seats.map(seatOf),
+    seats: l.seats.map((s) => seatOf(s, now)),
     turnTo: cleanOrNull(l.turnTo),
     power: l.power && { ...l.power, pausedPanes: l.power.pausedPanes.map((p) => cleanText(p, 32)), paused: pausedOf(l.power.pausedPanes, views) },
     cap: l.cap,

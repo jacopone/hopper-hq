@@ -7,7 +7,7 @@ import { cleanup, click, render, text } from '../helpers/render';
 afterEach(cleanup);
 
 const detail: LobbyDetail = {
-  version: 8,
+  version: 9,
   doorman: { name: 'Gordon', sessionId: 'G0' },
   gate: { go: false, text: 'ASPETTA: slice al 84%; ultimo avvio 40 s fa;', reasons: [{ kind: 'slice', text: 'slice al 84%' }, { kind: 'pacing', text: 'ultimo avvio 40 s fa' }], at: NOW - 12_000 },
   queue: [
@@ -28,10 +28,10 @@ const detail: LobbyDetail = {
     },
   ],
   seats: [
-    { account: 'jacopo@example.com', name: 'Jacopo', session: { usedPct: 6, resetsAt: null, readAt: NOW }, week: { usedPct: 41, resetsAt: null, readAt: NOW }, current: true, full: false, stale: false, turnable: true, org: 'amatino' },
-    { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: null, readAt: NOW }, current: false, full: true, stale: false, turnable: true, org: 'amatino' },
-    { account: 'pietro@example.com', name: 'Pietro', session: null, week: null, current: false, full: false, stale: true, turnable: true, org: null },
-    { account: 'francesco@example.com', name: 'Francesco', session: null, week: { usedPct: 23, resetsAt: null, readAt: NOW }, current: false, full: false, stale: false, turnable: true, org: 'tenuta' },
+    { account: 'jacopo@example.com', name: 'Jacopo', session: { usedPct: 6, resetsAt: null, readAt: NOW }, week: { usedPct: 41, resetsAt: null, readAt: NOW }, current: true, full: false, stale: false, turnable: true, org: 'amatino', weekPace: { elapsedPct: 50, aheadPct: -9 }, weekTouched: true, readAgeMs: 60_000 },
+    { account: 'luca@example.com', name: 'Luca', session: { usedPct: 2, resetsAt: null, readAt: NOW }, week: { usedPct: 86, resetsAt: null, readAt: NOW }, current: false, full: true, stale: false, turnable: true, org: 'amatino', weekPace: null, weekTouched: true, readAgeMs: 0 },
+    { account: 'pietro@example.com', name: 'Pietro', session: null, week: null, current: false, full: false, stale: true, turnable: true, org: null, weekPace: null, weekTouched: false, readAgeMs: null },
+    { account: 'francesco@example.com', name: 'Francesco', session: null, week: { usedPct: 23, resetsAt: null, readAt: NOW }, current: false, full: false, stale: false, turnable: true, org: 'tenuta', weekPace: { elapsedPct: 20, aheadPct: 3 }, weekTouched: true, readAgeMs: 4 * 86_400_000 },
   ],
   turnTo: 'francesco@example.com',
   power: { usedBytes: 34.6 * 2 ** 30, maxBytes: 44.7 * 2 ** 30, warnPct: 85, held: false, pausedPanes: ['wE:p1E'], paused: [{ pane: 'wE:p1E', sessionId: 'S1', name: 'G-256 e2e' }] },
@@ -54,6 +54,8 @@ function panel(...args: [] | [LobbyDetail | null | undefined]) {
   const section = (h: string) => [...target.querySelectorAll('section')].find((s) => text(s.querySelector('h3')) === h)!;
   return { target, onBack, onDesk, section };
 }
+
+const section0 = (h: string) => panel().section(h);
 
 describe('LobbyPanel', () => {
   it('heads the panel with the doorman, the age of the reading and the cap', () => {
@@ -78,7 +80,7 @@ describe('LobbyPanel', () => {
   it('lists the queue with each reason and wait, the seats with both windows, the turn, and the power with the paused sessions', () => {
     const { section, onDesk } = panel();
     expect([...section('Waiting outside').querySelectorAll('.refused li')].map(text)).toEqual(['G-270 segnali a J · leonardo@example.com · 4m · slice al 84%']);
-    expect([...section('Seats').querySelectorAll('li')].map(text)).toEqual(['▸ Jacopo 5h 6% · 7d 41%', 'Luca 5h 2% · 7d 86% · full', 'Pietro no fresh reading', 'Francesco 5h – · 7d 23%']);
+    expect([...section('Seats').querySelectorAll('li .seat-line')].map(text)).toEqual(['▸ Jacopo 5h 6% · 7d 41%', 'Luca 5h 2% · 7d 86% · full', 'Pietro no fresh reading', 'Francesco 5h – · 7d 23%']);
     expect(text(section('Seats').querySelector('.turn'))).toBe('Turn → francesco@example.com');
     expect(text(section('Session memory').querySelector('.gauge-text'))).toBe('34.6 / 44.7 GiB (77%) · mark 85%');
     const paused = section('Session memory').querySelector('.paused button')!;
@@ -233,6 +235,29 @@ describe('LobbyPanel', () => {
     const power = panel().section('Session memory');
     expect([...power.querySelectorAll('.bar .mark')].map((m) => (m as HTMLElement).style.left)).toEqual(['75%', '85%']);
     expect((power.querySelector('.bar .fill') as HTMLElement).style.width).toBe('77%');
+  });
+
+  it("sets each seat's week against a straight line to its reset, says whether it is touched, and always says how old the reading is", () => {
+    const seats = section0('Seats');
+    expect([...seats.querySelectorAll('li .seat-week')].map(text)).toEqual([
+      'week touched · 50% of it gone · 9 points under the line · read 1m ago',
+      'week touched · reset not known · read 0s ago',
+      'no reading',
+      'week touched · 20% of it gone · 3 points over the line · read 4d ago',
+    ]);
+    // A reading older than the gatekeeper's staleness window is drawn as old, never as the truth of now.
+    cleanup();
+    const old = panel({ ...detail, seats: [{ ...detail.seats[0]!, stale: true, readAgeMs: 3 * 86_400_000 }] }).section('Seats');
+    expect(text(old.querySelector('.seat-week'))).toBe('week touched · 50% of it gone · 9 points under the line · read 3d ago, stale');
+    expect(old.querySelector('.seat-week')!.classList.contains('old')).toBe(true);
+    cleanup();
+    const untouched = panel({ ...detail, seats: [{ ...detail.seats[0]!, week: { usedPct: 0, resetsAt: null, readAt: NOW }, weekPace: { elapsedPct: 10, aheadPct: -10 }, weekTouched: false }] }).section('Seats');
+    expect(text(untouched.querySelector('.seat-week'))).toBe('week untouched · 10% of it gone · 10 points under the line · read 1m ago');
+  });
+
+  it('names the weekly limits it reads: all models, and Fable, which no reading carries', () => {
+    const seats = section0('Seats');
+    expect(text(seats.querySelector('.week-limits'))).toBe('Bars: 5h, then 7d all models · Fable: not read');
   });
 
   it('draws each seat\'s two windows as bars', () => {

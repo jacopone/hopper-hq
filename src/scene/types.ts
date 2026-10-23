@@ -6,7 +6,7 @@
 import type { Org } from './palette.js';
 import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, WaitKind, Waiting, WaitingKind } from '../core/types.js';
 
-export const SCENE_VERSION = 8;
+export const SCENE_VERSION = 9;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -122,9 +122,23 @@ export interface PausedSession {
   name: string | null;
 }
 
-/** A seat in the detail: with the organisation of its account. */
+/** A seat's week against time: the window opens seven days before its reset. */
+export interface WeekPace {
+  /** The share of the seven days gone by, 0..100, rounded. */
+  elapsedPct: number;
+  /** Used less gone by, in points: above zero the seat spends faster than a straight line to its reset. */
+  aheadPct: number;
+}
+
+/** A seat in the detail: with the organisation of its account, and its week against time. */
 export interface SeatView extends Seat {
   org: Org | null;
+  /** Null without a weekly reading, without a reset, or once the reset has passed: the next window's start is not known. */
+  weekPace: WeekPace | null;
+  /** Any of the week is used, full or not. */
+  weekTouched: boolean;
+  /** How old the newest reading is (ms); null when no reading dates itself. */
+  readAgeMs: number | null;
 }
 
 /** A session of a task on the board. */
