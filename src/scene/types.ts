@@ -28,7 +28,7 @@ export interface FacadeWindow {
 }
 
 export interface FloorSummary {
-  /** Stable id: 'feature:<key>' or 'repo:<repo root, or cwd outside git>'. */
+  /** Stable id: 'feature:<key>', 'repo:<repo root, or cwd outside git>', or in folder mode 'folder:<folder path>' ('folder:other' outside the home). */
   key: string;
   /** 1 = bottom floor (oldest first-seen). Floors are listed top to bottom. */
   number: number;
