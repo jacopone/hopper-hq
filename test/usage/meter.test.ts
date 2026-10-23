@@ -79,6 +79,17 @@ describe('UsageFile', () => {
     expect(f.tally().tokens.output).toBe(1);
   });
 
+  it('is done, and stops no poll, when a file that stats cannot be read', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'shq-usage-dir-'));
+    const f = new UsageFile(dir);
+    await expect(f.read()).resolves.toBe(0);
+    expect(f.done).toBe(true);
+    const m = new UsageMeter();
+    const ok = await file([reply('a', { output_tokens: 3 })]);
+    await m.poll([{ id: 'D', transcript: dir }, { id: 'A', transcript: ok }]);
+    expect(m.read().get('A')!.main.tokens.output).toBe(3);
+  });
+
   it('is empty and done for a file that cannot be read', async () => {
     const f = new UsageFile('/nonexistent/t.jsonl');
     await f.read();

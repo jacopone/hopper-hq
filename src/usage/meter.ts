@@ -92,7 +92,15 @@ export class UsageFile {
     }
     if (size < this.tail.offset) this.reset();
     const before = this.tail.offset;
-    const { lines, state } = await readNewLines(this.tail, maxBytes);
+    let read: Awaited<ReturnType<typeof readNewLines>>;
+    try {
+      read = await readNewLines(this.tail, maxBytes);
+    } catch {
+      // Gone, or not readable, since its stat: it is done for now, so that it never holds up the files after it.
+      this.done = true;
+      return 0;
+    }
+    const { lines, state } = read;
     this.tail = state;
     for (const line of lines) {
       const r = usageOfLine(line);

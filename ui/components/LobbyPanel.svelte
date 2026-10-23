@@ -58,14 +58,14 @@
     const parts = [s.weekTouched ? 'week touched' : 'week untouched'];
     if (s.weekPace) {
       const a = s.weekPace.aheadPct;
-      parts.push(`${s.weekPace.elapsedPct}% of it gone`, `${Math.abs(a)} points ${a > 0 ? 'over' : 'under'} the line`);
+      parts.push(`${s.weekPace.elapsedPct}% of it gone`, a === 0 ? 'on the line' : `${Math.abs(a)} points ${a > 0 ? 'over' : 'under'} the line`);
     } else parts.push('reset not known');
     if (s.readAgeMs !== null) parts.push(`read ${formatAgo(s.readAgeMs)} ago${s.stale ? ', stale' : ''}`);
     else if (s.stale) parts.push('stale');
     return parts.join(' · ');
   };
   /** 912, 98.0k, 4.56M. */
-  const tok = (n: number) => (n < 1000 ? `${n}` : n < 1_000_000 ? `${(n / 1000).toFixed(n < 100_000 ? 1 : 0)}k` : `${(n / 1_000_000).toFixed(2)}M`);
+  const tok = (n: number) => (n < 1000 ? `${n}` : n < 99_950 ? `${(n / 1000).toFixed(1)}k` : n < 999_500 ? `${(n / 1000).toFixed(0)}k` : `${(n / 1_000_000).toFixed(2)}M`);
   const usd = (n: number) => (n > 0 && n < 0.01 ? '<$0.01' : `$${n.toFixed(2)}`);
   const rate = (n: number) => `$${n}`;
   type Tally = NonNullable<LobbyDetail['usage']>['total'];
