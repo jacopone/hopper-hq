@@ -1,7 +1,7 @@
-import type { FloorDetail } from '../../../src/scene/types';
+import type { FloorDetail, LobbyDetail } from '../../../src/scene/types';
 import { occupantsOf } from '../../lib/occupants';
 import type { RendererModule } from '../../lib/renderer';
-import type { FloorView, Target, ThemeTokens, ViewOptions } from '../../renderer/index';
+import type { FloorView, LobbyView, Target, ThemeTokens, ViewOptions } from '../../renderer/index';
 import { readThemeTokens } from '../../renderer/theme';
 
 /** A floor view that records what the stage asks of it, and lets a test send its events. */
@@ -18,10 +18,18 @@ export interface FakeView extends FloorView {
   emit(event: 'moving', moving: boolean): void;
 }
 
+/** A Lobby view that records what the stage asks of it. */
+export interface FakeLobbyView extends LobbyView {
+  mountedTheme: string;
+  /** In order: 'lobby <refused> <ready> <seats>', 'theme <data-theme>', 'dispose'. */
+  calls: string[];
+}
+
 export interface FakeRenderer {
-  /** The stage's loader. Its mountFloorView makes fake views, or throws `fail`. */
+  /** The stage's loader. Its mountFloorView and mountLobbyView make fake views, or throw `fail`. */
   load: () => Promise<RendererModule>;
   views: FakeView[];
+  lobbies: FakeLobbyView[];
 }
 
 type Listener = (arg: never) => void;
@@ -30,6 +38,7 @@ const sessionCount = (floor: FloorDetail) => occupantsOf(floor).length;
 
 export function fakeRenderer(opts: { fail?: unknown } = {}): FakeRenderer {
   const views: FakeView[] = [];
+  const lobbies: FakeLobbyView[] = [];
   /** Each theme the stage read, with the `data-theme` <html> had at that moment. */
   const read = new WeakMap<ThemeTokens, string>();
   const themeOf = (tokens: ThemeTokens) => read.get(tokens) ?? 'not read by the stage';
@@ -66,6 +75,20 @@ export function fakeRenderer(opts: { fail?: unknown } = {}): FakeRenderer {
       views.push(view as FakeView);
       return view as FakeView;
     },
+    mountLobbyView(_host: { canvas: HTMLCanvasElement }, theme: ThemeTokens): LobbyView {
+      if (opts.fail !== undefined) throw opts.fail;
+      const calls: string[] = [];
+      const count = (l: Pick<LobbyDetail, 'tasks'>, where: string) => l.tasks.filter((t) => t.where === where).length;
+      const view: FakeLobbyView = {
+        mountedTheme: themeOf(theme),
+        calls,
+        setLobby: (l) => void calls.push(`lobby ${count(l, 'refused')} ${count(l, 'waiting')} ${l.seats.length}`),
+        setTheme: (next) => void calls.push(`theme ${themeOf(next)}`),
+        dispose: () => void calls.push('dispose'),
+      };
+      lobbies.push(view);
+      return view;
+    },
   };
-  return { load: () => Promise.resolve(module), views };
+  return { load: () => Promise.resolve(module), views, lobbies };
 }

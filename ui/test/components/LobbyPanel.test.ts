@@ -16,11 +16,11 @@ const detail: LobbyDetail = {
     { id: 'G-156', name: 'G-156 sblocco', account: null, since: NOW - 7_200_000, reason: { kind: 'other', text: 'pronta: brief scritto' }, kind: 'ready', area: null, repo: null },
   ],
   tasks: [
-    { id: 'G-270', title: 'G-270 segnali a J', tie: 4, org: 'amatino', where: 'refused', reason: 'slice al 84%', since: NOW - 4 * 60_000, account: 'leonardo@example.com', sessions: [], subagents: 0 },
-    { id: 'G-155', title: 'G-155 rebuild', tie: 1, org: 'personal', where: 'waiting', reason: null, since: NOW - 3_600_000, account: null, sessions: [], subagents: 0 },
-    { id: 'G-156', title: 'G-156 sblocco', tie: 2, org: null, where: 'waiting', reason: null, since: NOW - 7_200_000, account: null, sessions: [], subagents: 0 },
+    { id: 'G-270', title: 'G-270 segnali a J', tie: 4, org: 'amatino', body: 2, where: 'refused', reason: 'slice al 84%', since: NOW - 4 * 60_000, account: 'leonardo@example.com', sessions: [], subagents: 0 },
+    { id: 'G-155', title: 'G-155 rebuild', tie: 1, org: 'personal', body: null, where: 'waiting', reason: null, since: NOW - 3_600_000, account: null, sessions: [], subagents: 0 },
+    { id: 'G-156', title: 'G-156 sblocco', tie: 2, org: null, body: null, where: 'waiting', reason: null, since: NOW - 7_200_000, account: null, sessions: [], subagents: 0 },
     {
-      id: 'G-178', title: 'pr-medic-app', tie: 5, org: 'amatino', where: 'live', reason: null, since: null, account: null, subagents: 2,
+      id: 'G-178', title: 'pr-medic-app', tie: 5, org: 'amatino', body: 3, where: 'live', reason: null, since: null, account: null, subagents: 2,
       sessions: [
         { sessionId: 'S1', name: 'pr-medic 1', state: 'working', org: 'amatino', body: 3 },
         { sessionId: 'S2', name: 'pr-medic 2', state: 'needs_you', org: 'tenuta', body: 3 },
@@ -60,7 +60,7 @@ const detail: LobbyDetail = {
   updatedAt: NOW - 12_000,
 };
 
-const ready = (n: number): TaskCard[] => Array.from({ length: n }, (_, i) => ({ id: `G-${300 + i}`, title: `G-${300 + i} task`, tie: i % 8, org: null, where: 'waiting' as const, reason: null, since: NOW - (i + 1) * 60_000, account: null, sessions: [], subagents: 0 }));
+const ready = (n: number): TaskCard[] => Array.from({ length: n }, (_, i) => ({ id: `G-${300 + i}`, title: `G-${300 + i} task`, tie: i % 8, org: null, body: null, where: 'waiting' as const, reason: null, since: NOW - (i + 1) * 60_000, account: null, sessions: [], subagents: 0 }));
 
 /** Mounts the panel; with no argument it shows `detail`, and `undefined` passed on purpose means loading. */
 function panel(...args: [] | [LobbyDetail | null | undefined]) {
@@ -144,7 +144,7 @@ describe('LobbyPanel', () => {
   });
 
   it("draws every card and row even when two tasks carry the same id once cleaned", () => {
-    const twin = (title: string): TaskCard => ({ id: 'G-1', title, tie: 0, org: null, where: 'refused', reason: null, since: NOW, account: null, sessions: [], subagents: 0 });
+    const twin = (title: string): TaskCard => ({ id: 'G-1', title, tie: 0, org: null, body: null, where: 'refused', reason: null, since: NOW, account: null, sessions: [], subagents: 0 });
     const wait = panel({ ...detail, tasks: [twin('first'), twin('second')] }).section('Waiting outside');
     expect([...wait.querySelectorAll('li')].map((li) => text(li).split(' · ')[0])).toEqual(['first', 'second']);
   });
