@@ -1,4 +1,4 @@
-import { appendFile, mkdtemp, writeFile } from 'node:fs/promises';
+import { appendFile, mkdir, mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
@@ -107,5 +107,37 @@ describe('UsageMeter', () => {
     expect(first.reduce((x, y) => x + y, 0)).toBeLessThan(200);
     for (let i = 0; i < 10; i++) await m.poll([{ id: 'A', transcript: a }, { id: 'B', transcript: b }]);
     expect([...m.read().values()].map((u) => [u.main.tokens.output, u.main.done])).toEqual([[100, true], [100, true]]);
+  });
+});
+
+describe("UsageMeter and a session's subagents", () => {
+  it("reads each subagent's transcript beside the session's, a workflow's agents too, with its type and task from its meta file", async () => {
+    const main = await file([reply('m', { output_tokens: 5 })]);
+    const dir = main.replace(/\.jsonl$/, '');
+    await mkdir(join(dir, 'subagents', 'workflows', 'wf_1'), { recursive: true });
+    await writeFile(join(dir, 'subagents', 'agent-a1.jsonl'), reply('s1', { output_tokens: 40 }) + '\n');
+    await writeFile(join(dir, 'subagents', 'agent-a1.meta.json'), JSON.stringify({ agentType: 'Explore', description: 'Find the callers' }));
+    await writeFile(join(dir, 'subagents', 'agent-a2.jsonl'), reply('s2', { output_tokens: 3 }) + '\n');
+    await writeFile(join(dir, 'subagents', 'workflows', 'wf_1', 'agent-w1.jsonl'), reply('w1', { output_tokens: 7 }) + '\n');
+    await writeFile(join(dir, 'subagents', 'workflows', 'wf_1', 'journal.jsonl'), '{}\n');
+    const m = new UsageMeter();
+    await m.poll([{ id: 'A', transcript: main }]);
+    const u = m.read().get('A')!;
+    expect(u.main.tokens.output).toBe(5);
+    expect(u.subagents.map((s) => [s.agentId, s.type, s.label, s.runId, s.tokens.output, s.done])).toEqual([
+      ['a1', 'Explore', 'Find the callers', null, 40, true],
+      ['a2', null, null, null, 3, true],
+      ['w1', null, null, 'wf_1', 7, true],
+    ]);
+    // A subagent started later is found at the next poll.
+    await writeFile(join(dir, 'subagents', 'agent-a3.jsonl'), reply('s3', { output_tokens: 1 }) + '\n');
+    await m.poll([{ id: 'A', transcript: main }]);
+    expect(m.read().get('A')!.subagents.map((s) => s.agentId)).toEqual(['a1', 'a2', 'a3', 'w1']);
+  });
+
+  it('has no subagents for a session whose directory has none', async () => {
+    const m = new UsageMeter();
+    await m.poll([{ id: 'A', transcript: await file([reply('m', { output_tokens: 5 })]) }]);
+    expect(m.read().get('A')!.subagents).toEqual([]);
   });
 });

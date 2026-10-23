@@ -5,6 +5,7 @@ import type { Lobby } from '../../src/core/types.js';
 import { toView } from '../../src/core/view.js';
 import { buildLobbyDetail, buildLobbySummary } from '../../src/scene/lobby.js';
 import { QUEUE_MAX, SCENE_VERSION } from '../../src/scene/types.js';
+import { INTERNS_MAX } from '../../src/scene/layout.js';
 
 const NOW = 1_792_150_000_000;
 const lobby: Lobby = {
@@ -277,7 +278,7 @@ describe("the sessions' tokens at list price", () => {
 
   it('lists each metered session in the building, the dearest first, and sums them by account and in all', () => {
     const vs = [at('A', 'luca@amatino.ai', 'G-1'), at('B', 'luca@amatino.ai'), at('C', null)];
-    const usage = new Map([['A', { main: tally(10, 1.5) }], ['B', { main: tally(20, 3, { done: false }) }], ['C', { main: tally(5, 0.25, { unpricedTokens: 7 }) }], ['Z', { main: tally(99, 99) }]]);
+    const usage = new Map([['A', { main: tally(10, 1.5), subagents: [] }], ['B', { main: tally(20, 3, { done: false }), subagents: [] }], ['C', { main: tally(5, 0.25, { unpricedTokens: 7 }), subagents: [] }], ['Z', { main: tally(99, 99), subagents: [] }]]);
     const u = buildLobbyDetail(lobby, vs, NOW, usage).usage!;
     expect(u.sessions.map((s) => [s.sessionId, s.name, s.account, s.org, s.task, s.costUsd, s.counting])).toEqual([
       ['B', 'B name', 'luca@amatino.ai', 'amatino', null, 3, true],
@@ -288,8 +289,22 @@ describe("the sessions' tokens at list price", () => {
     expect(u.total).toEqual({ tokens: { input: 3, cacheWrite: 6, cacheRead: 9, output: 35 }, costUsd: 4.75, unpricedTokens: 7, counting: true });
   });
 
+  it("counts a session's subagents into it, shows the dearest INTERNS_MAX of them and counts the rest", () => {
+    const agent = (agentId: string, cost: number, extra: Record<string, unknown> = {}) => ({ ...tally(1, cost), agentId, type: 'Explore', label: `${agentId}\u0007 task`, runId: null, ...extra });
+    const subagents = [agent('a1', 0.1), agent('a2', 0.4, { runId: 'wf_1', type: null }), agent('a3', 0.2, { done: false }), agent('a4', 0.3), agent('a5', 0.05)];
+    const s = buildLobbyDetail(lobby, [at('A', null)], NOW, new Map([['A', { main: tally(10, 1), subagents }]])).usage!.sessions[0]!;
+    expect(INTERNS_MAX).toBe(3);
+    expect(s.subagents.map((a) => [a.agentId, a.type, a.label, a.runId, a.costUsd])).toEqual([['a2', null, 'a2 task', 'wf_1', 0.4], ['a4', 'Explore', 'a4 task', null, 0.3], ['a3', 'Explore', 'a3 task', null, 0.2]]);
+    expect([s.subagentsCount, s.subagentsMore]).toEqual([5, 2]);
+    expect(s.subagentsTally.costUsd).toBeCloseTo(1.05, 9);
+    expect(s.costUsd).toBeCloseTo(2.05, 9);
+    expect(s.tokens.output).toBe(15);
+    // A subagent still being read makes its session's figures, and the building's, still counting.
+    expect(s.counting).toBe(true);
+  });
+
   it('names the page the rates were read from, the day and the unit, with the rates of the models in use only', () => {
-    const u = buildLobbyDetail(lobby, [at('A', null)], NOW, new Map([['A', { main: tally(1, 1, { models: ['claude-opus-5-5', 'claude-opus-9-9'] }) }]])).usage!;
+    const u = buildLobbyDetail(lobby, [at('A', null)], NOW, new Map([['A', { main: tally(1, 1, { models: ['claude-opus-5-5', 'claude-opus-9-9'] }), subagents: [] }]])).usage!;
     expect(u.prices).toMatchObject({ source: 'https://platform.claude.com/docs/en/about-claude/pricing', readAt: '2026-10-23', currency: 'USD', unit: 'per million tokens' });
     expect(u.prices.rates).toEqual([{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', input: 4, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2, output: 20 }]);
   });

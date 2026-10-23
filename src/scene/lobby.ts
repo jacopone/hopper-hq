@@ -3,6 +3,7 @@ import { byCodeUnit, repoRootOf } from '../core/view.js';
 import type { Allowance, Capacity, GateVerdict, Lobby, Seat, Tokens, Waiting } from '../core/types.js';
 import type { SessionUsage, Tally } from '../usage/meter.js';
 import { modelKey, PRICES } from '../usage/prices.js';
+import { INTERNS_MAX } from './layout.js';
 import type { SessionView } from '../core/view.js';
 import { FEATURE_SLOTS, orgOfAccount, orgOfArea, REPO_SLOTS, slotOf } from './palette.js';
 import { cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
@@ -210,7 +211,24 @@ function usageDetail(views: readonly SessionView[], usage: ReadonlyMap<string, S
     .map((v) => {
       const u = usage.get(v.id)!;
       const account = cleanOrNull(v.account);
-      return { ...tallyOf(u.main), sessionId: cleanText(v.id, KEY_MAX), name: cleanOrNull(v.name, 60) ?? cleanText(v.id.slice(0, 8)), account, org: orgOfAccount(account), task: cleanOrNull(v.task, 64), models: u.main.models.map((m) => cleanText(m, 60)) };
+      const agents = u.subagents
+        .map((a) => ({ ...tallyOf(a), agentId: cleanText(a.agentId, KEY_MAX), type: cleanOrNull(a.type, 40), label: cleanOrNull(a.label, 80), runId: cleanOrNull(a.runId, 64) }))
+        .sort((a, b) => b.costUsd - a.costUsd || byCodeUnit(a.agentId, b.agentId));
+      const subagentsTally = sumTallies(agents);
+      const models = [...new Set([u.main, ...u.subagents].flatMap((t) => t.models))].sort().map((m) => cleanText(m, 60));
+      return {
+        ...sumTallies([tallyOf(u.main), subagentsTally]),
+        sessionId: cleanText(v.id, KEY_MAX),
+        name: cleanOrNull(v.name, 60) ?? cleanText(v.id.slice(0, 8)),
+        account,
+        org: orgOfAccount(account),
+        task: cleanOrNull(v.task, 64),
+        models,
+        subagents: agents.slice(0, INTERNS_MAX),
+        subagentsCount: agents.length,
+        subagentsMore: Math.max(0, agents.length - INTERNS_MAX),
+        subagentsTally,
+      };
     })
     .sort((a, b) => b.costUsd - a.costUsd || byCodeUnit(a.sessionId, b.sessionId));
   const byAccount = new Map<string, typeof sessions>();

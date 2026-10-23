@@ -67,7 +67,7 @@ describe('the Lobby', () => {
     await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, transcriptPath: '/t/S1.jsonl' }));
     expect(c.meteredSessions()).toEqual([{ id: 'S1', transcript: '/t/S1.jsonl' }]);
     const main = { tokens: { input: 1, cacheWrite: 0, cacheRead: 0, output: 2 }, costUsd: 0.5, unpricedTokens: 0, models: [], replies: 1, done: true };
-    c.setUsageSource(() => new Map([['S1', { main }]]));
+    c.setUsageSource(() => new Map([['S1', { main, subagents: [] }]]));
     expect(c.lobbyDetail()!.usage!.total).toMatchObject({ costUsd: 0.5, tokens: { output: 2 } });
   });
 });

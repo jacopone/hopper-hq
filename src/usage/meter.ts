@@ -1,6 +1,8 @@
-import { stat } from 'node:fs/promises';
+import { readdir, readFile, stat } from 'node:fs/promises';
+import { basename, dirname, join } from 'node:path';
 import { readNewLines, type TailState } from '../adapters/claude-code/jsonl.js';
 import type { Tokens } from '../core/types.js';
+import { byCodeUnit } from '../core/view.js';
 import { costOf, type MessageUsage } from './prices.js';
 
 /** What a transcript used: tokens by kind, their list price, and the tokens of models with no price, which the cost leaves out. */
@@ -132,9 +134,59 @@ export interface MeteredSession {
   transcript: string | null;
 }
 
-/** A session's usage as far as it is read; `done` once its whole transcript is counted. */
+/** A subagent's usage: the session's own, or one agent of a workflow run it launched. */
+export interface SubagentUsage extends Tally {
+  agentId: string;
+  /** Its type and task from its meta file; null when the file says none. */
+  type: string | null;
+  label: string | null;
+  /** The workflow run it belongs to; null for a subagent of the session itself. */
+  runId: string | null;
+  done: boolean;
+}
+
+/** A session's usage as far as it is read: its own transcript's, and each subagent's; `done` once a transcript is counted whole. */
 export interface SessionUsage {
   main: Tally & { done: boolean };
+  /** By run (the session's own first), then by id. */
+  subagents: SubagentUsage[];
+}
+
+interface Agent {
+  file: UsageFile;
+  agentId: string;
+  runId: string | null;
+  type: string | null;
+  label: string | null;
+}
+
+interface Metered {
+  main: UsageFile;
+  agents: Map<string, Agent>;
+}
+
+const AGENT_FILE = /^agent-(.+)\.jsonl$/;
+const META_MAX = 256 * 1024;
+
+/** An agent's type and task, from the meta file beside its transcript; nulls when it has none or it is not JSON. */
+async function metaOf(path: string): Promise<{ type: string | null; label: string | null }> {
+  try {
+    const st = await stat(path);
+    if (!st.isFile() || st.size > META_MAX) return { type: null, label: null };
+    const d = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown> | null;
+    const text = (v: unknown) => (typeof v === 'string' && v ? v : null);
+    return { type: text(d?.agentType), label: text(d?.description) };
+  } catch {
+    return { type: null, label: null };
+  }
+}
+
+async function names(dir: string): Promise<string[]> {
+  try {
+    return await readdir(dir);
+  } catch {
+    return [];
+  }
 }
 
 /** How much the meter reads at most in one poll, across every transcript: the first pass over the building is spread over polls. */
@@ -145,7 +197,7 @@ export const POLL_BUDGET = 16 * 1024 * 1024;
  * calls nothing. A session that leaves the building is forgotten.
  */
 export class UsageMeter {
-  private readonly files = new Map<string, UsageFile>();
+  private readonly sessions = new Map<string, Metered>();
   private timer: NodeJS.Timeout | null = null;
   private busy = false;
 
@@ -163,7 +215,7 @@ export class UsageMeter {
     this.timer = null;
   }
 
-  /** One pass: the files not yet read whole first, each up to what is left of the budget. Overlapping calls are skipped. */
+  /** One pass: the subagents found, then the files not yet read whole first, each up to what is left of the budget. Overlapping calls are skipped. */
   async poll(sessions: readonly MeteredSession[]): Promise<void> {
     if (this.busy) return;
     this.busy = true;
@@ -172,13 +224,14 @@ export class UsageMeter {
       for (const s of sessions) {
         if (!s.transcript) continue;
         live.add(s.id);
-        const f = this.files.get(s.id);
-        if (!f || f.path !== s.transcript) this.files.set(s.id, new UsageFile(s.transcript));
+        let m = this.sessions.get(s.id);
+        if (!m || m.main.path !== s.transcript) this.sessions.set(s.id, (m = { main: new UsageFile(s.transcript), agents: new Map() }));
+        await this.findAgents(m);
       }
-      for (const id of [...this.files.keys()]) if (!live.has(id)) this.files.delete(id);
+      for (const id of [...this.sessions.keys()]) if (!live.has(id)) this.sessions.delete(id);
       let left = this.budget;
-      const order = [...this.files.values()].sort((a, b) => Number(a.done) - Number(b.done));
-      for (const f of order) {
+      const files = [...this.sessions.values()].flatMap((m) => [m.main, ...[...m.agents.values()].map((a) => a.file)]);
+      for (const f of files.sort((a, b) => Number(a.done) - Number(b.done))) {
         if (left <= 0) break;
         const step = Math.min(left, READ_BUDGET);
         await f.read(step);
@@ -189,7 +242,32 @@ export class UsageMeter {
     }
   }
 
+  /** The subagents beside a session's transcript: its own in subagents/, a workflow run's in subagents/workflows/<run>/. */
+  private async findAgents(m: Metered): Promise<void> {
+    const dir = join(dirname(m.main.path), basename(m.main.path, '.jsonl'), 'subagents');
+    const runs = (await names(join(dir, 'workflows'))).filter((n) => n.startsWith('wf_'));
+    for (const [runId, at] of [[null, dir] as const, ...runs.map((r) => [r, join(dir, 'workflows', r)] as const)]) {
+      for (const name of await names(at)) {
+        const agentId = AGENT_FILE.exec(name)?.[1];
+        const key = `${runId ?? ''}/${agentId}`;
+        if (!agentId || m.agents.has(key)) continue;
+        const meta = await metaOf(join(at, `agent-${agentId}.meta.json`));
+        m.agents.set(key, { file: new UsageFile(join(at, name)), agentId, runId, ...meta });
+      }
+    }
+  }
+
   read(): Map<string, SessionUsage> {
-    return new Map([...this.files].map(([id, f]) => [id, { main: { ...f.tally(), done: f.done } }]));
+    return new Map(
+      [...this.sessions].map(([id, m]) => [
+        id,
+        {
+          main: { ...m.main.tally(), done: m.main.done },
+          subagents: [...m.agents.values()]
+            .sort((a, b) => byCodeUnit(a.runId ?? '', b.runId ?? '') || byCodeUnit(a.agentId, b.agentId))
+            .map((a) => ({ ...a.file.tally(), agentId: a.agentId, runId: a.runId, type: a.type, label: a.label, done: a.file.done })),
+        },
+      ]),
+    );
   }
 }

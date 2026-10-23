@@ -303,7 +303,18 @@
         </ul>
         <ul class="list usage-sessions">
           {#each u.sessions.slice(0, USAGE_SHOWN) as s (s.sessionId)}
-            <li>{s.name}{s.task ? ` · ${s.task}` : ''} · in {tok(s.tokens.input)} · write {tok(s.tokens.cacheWrite)} · read {tok(s.tokens.cacheRead)} · out {tok(s.tokens.output)} · {usd(s.costUsd)}{counting(s)}</li>
+            <li>
+              <span class="line">{s.name}{s.task ? ` · ${s.task}` : ''} · in {tok(s.tokens.input)} · write {tok(s.tokens.cacheWrite)} · read {tok(s.tokens.cacheRead)} · out {tok(s.tokens.output)} · {usd(s.costUsd)}{counting(s)}</span>
+              {#if s.subagentsCount > 0}
+                <span class="subs-head">{plural(s.subagentsCount, 'subagent', 'subagents')} · {tok(sumOf(s.subagentsTally))} tokens · {usd(s.subagentsTally.costUsd)}{counting(s.subagentsTally)}</span>
+                <ul class="subs">
+                  {#each s.subagents as a (`${a.runId ?? ''}/${a.agentId}`)}
+                    <li>{a.type ?? 'agent'}{a.label ? ` · ${a.label}` : a.runId ? ` · ${a.runId}` : ''} · {tok(sumOf(a))} tokens · {usd(a.costUsd)}{counting(a)}</li>
+                  {/each}
+                  {#if s.subagentsMore > 0}<li class="more">+{s.subagentsMore} more</li>{/if}
+                </ul>
+              {/if}
+            </li>
           {/each}
         </ul>
         {#if u.sessions.length > USAGE_SHOWN}<p class="p-note">{plural(u.sessions.length - USAGE_SHOWN, 'more session', 'more sessions')} in the totals.</p>{/if}
@@ -407,6 +418,9 @@
   .usage-total { margin: 4px 0; font-family: var(--font-mono); font-size: 12.5px; font-weight: 600; }
   .usage-sessions, .rates { margin-top: 6px; font-size: 11.5px; }
   .rates { color: var(--muted); }
+  .usage-sessions > li { display: grid; gap: 2px; }
+  .subs-head { padding-left: 12px; color: var(--muted); }
+  .subs { list-style: none; margin: 0; padding: 0 0 0 24px; display: grid; gap: 1px; color: var(--muted); }
   .seat-week { font-size: 11.5px; color: var(--muted); }
   .seat-week.old { font-style: italic; }
   .seat-bars { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }

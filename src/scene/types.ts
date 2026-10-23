@@ -182,14 +182,30 @@ export interface UsageTally {
   counting: boolean;
 }
 
+/** A subagent of a session: its own, or an agent of a workflow run it launched. */
+export interface SubagentUsageView extends UsageTally {
+  agentId: string;
+  type: string | null;
+  label: string | null;
+  runId: string | null;
+}
+
+/** A session's usage: its own transcript's and its subagents' together. */
 export interface SessionUsageView extends UsageTally {
   sessionId: string;
   name: string;
   account: string | null;
   org: Org | null;
   task: string | null;
-  /** The models of its replies, as the transcript names them. */
+  /** The models of its replies and its subagents', as the transcripts name them. */
   models: string[];
+  /** The dearest INTERNS_MAX of its subagents. */
+  subagents: SubagentUsageView[];
+  /** How many subagents it has, and how many are not listed. */
+  subagentsCount: number;
+  subagentsMore: number;
+  /** Its subagents together. */
+  subagentsTally: UsageTally;
 }
 
 export interface SeatUsageView extends UsageTally {

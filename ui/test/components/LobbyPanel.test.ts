@@ -43,8 +43,13 @@ const detail: LobbyDetail = {
   usage: {
     prices: { source: 'https://platform.claude.com/docs/en/about-claude/pricing', readAt: '2026-10-23', currency: 'USD', unit: 'per million tokens', rates: [{ model: 'claude-opus-5-5', label: 'Claude Opus 5.5', input: 4, cacheWrite5m: 5, cacheWrite1h: 8, cacheRead: 0.2, output: 20 }] },
     sessions: [
-      { sessionId: 'S1', name: 'pr-medic 1', account: 'luca@amatino.ai', org: 'amatino', task: 'G-178', models: ['claude-opus-5-5'], tokens: { input: 1200, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_000 }, costUsd: 7.81, unpricedTokens: 0, counting: false },
-      { sessionId: 'S2', name: 'pr-medic 2', account: null, org: null, task: null, models: ['claude-opus-5-5'], tokens: { input: 12, cacheWrite: 0, cacheRead: 0, output: 900 }, costUsd: 0.004, unpricedTokens: 0, counting: true },
+      { sessionId: 'S1', name: 'pr-medic 1', account: 'luca@amatino.ai', org: 'amatino', task: 'G-178', models: ['claude-opus-5-5'], tokens: { input: 1200, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_000 }, costUsd: 7.81, unpricedTokens: 0, counting: false,
+        subagents: [
+          { agentId: 'a1', type: 'Explore', label: 'Find the callers', runId: null, tokens: { input: 10, cacheWrite: 20_000, cacheRead: 100_000, output: 3000 }, costUsd: 0.18, unpricedTokens: 0, counting: false },
+          { agentId: 'w1', type: null, label: null, runId: 'wf_1', tokens: { input: 5, cacheWrite: 0, cacheRead: 0, output: 400 }, costUsd: 0.01, unpricedTokens: 0, counting: true },
+        ],
+        subagentsCount: 6, subagentsMore: 4, subagentsTally: { tokens: { input: 40, cacheWrite: 60_000, cacheRead: 300_000, output: 9000 }, costUsd: 0.55, unpricedTokens: 0, counting: true } },
+      { sessionId: 'S2', name: 'pr-medic 2', account: null, org: null, task: null, models: ['claude-opus-5-5'], tokens: { input: 12, cacheWrite: 0, cacheRead: 0, output: 900 }, costUsd: 0.004, unpricedTokens: 0, counting: true, subagents: [], subagentsCount: 0, subagentsMore: 0, subagentsTally: { tokens: { input: 0, cacheWrite: 0, cacheRead: 0, output: 0 }, costUsd: 0, unpricedTokens: 0, counting: false } },
     ],
     seats: [
       { account: 'luca@amatino.ai', org: 'amatino', sessions: 1, tokens: { input: 1200, cacheWrite: 340_000, cacheRead: 4_560_000, output: 98_000 }, costUsd: 7.81, unpricedTokens: 0, counting: false },
@@ -277,10 +282,15 @@ describe('LobbyPanel', () => {
     expect(text(u.querySelector('.usage-note'))).toBe('List price, not billed: the seats are subscriptions. Rates read 2026-10-23 from platform.claude.com, USD per million tokens.');
     expect(text(u.querySelector('.usage-total'))).toBe('In the building: 5.00M tokens · $7.81 · 3.4k tokens of a model with no price · counting…');
     expect([...u.querySelectorAll('.usage-seats li')].map(text)).toEqual(['luca@amatino.ai · 1 session · 5.00M tokens · $7.81', 'unknown · 1 session · 912 tokens · <$0.01 · counting…']);
-    expect([...u.querySelectorAll('.usage-sessions li')].map(text)).toEqual([
+    expect([...u.querySelectorAll('.usage-sessions > li > .line')].map(text)).toEqual([
       'pr-medic 1 · G-178 · in 1.2k · write 340k · read 4.56M · out 98.0k · $7.81',
       'pr-medic 2 · in 12 · write 0 · read 0 · out 900 · <$0.01 · counting…',
     ]);
+    // A session's subagents: the dearest INTERNS_MAX listed under it, the rest counted with what they cost together.
+    const subs = u.querySelector('.usage-sessions > li')!;
+    expect(text(subs.querySelector('.subs-head'))).toBe('6 subagents · 369k tokens · $0.55 · counting…');
+    expect([...subs.querySelectorAll('.subs li')].map(text)).toEqual(['Explore · Find the callers · 123k tokens · $0.18', 'agent · wf_1 · 405 tokens · $0.01 · counting…', '+4 more']);
+    expect(u.querySelectorAll('.usage-sessions > li')[1]!.querySelector('.subs-head')).toBeNull();
     expect([...u.querySelectorAll('.rates li')].map(text)).toEqual(['Claude Opus 5.5 · in $4 · 5m write $5 · 1h write $8 · read $0.2 · out $20']);
     cleanup();
     expect(text(panel({ ...detail, usage: null }).section('Tokens at list price').querySelector('.p-note'))).toBe('The building does not meter its sessions.');
