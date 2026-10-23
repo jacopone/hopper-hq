@@ -7,6 +7,7 @@ import { buildAttention, buildFloors, floorKeyOf, toView, type Attention, type F
 import type { TerminalKind } from './core/terminal.js';
 import { buildFloorDetail, buildScene, DEFAULT_TERMINAL } from './scene/build.js';
 import { buildLobbyDetail } from './scene/lobby.js';
+import type { MeteredSession, SessionUsage } from './usage/meter.js';
 import { parseSeating, seatFloor, type Seating } from './scene/seating.js';
 import { cleanOrNull, cleanText, isSessionId, taskTitle } from './scene/text.js';
 import type { BuildingScene, FloorDetail, LobbyDetail } from './scene/types.js';
@@ -99,6 +100,8 @@ export class Collector {
   private terminalReachable: boolean | null = null;
   /** The gatekeeper's Lobby, as its provider last gave it; null without one. */
   private lobbyState: Lobby | null = null;
+  /** The sessions' usage, read when the Lobby's detail is asked for. */
+  private usageSource: (() => ReadonlyMap<string, SessionUsage>) | null = null;
 
   constructor(private readonly o: CollectorOptions) {
     this.now = o.now ?? Date.now;
@@ -399,9 +402,21 @@ export class Collector {
     return out;
   }
 
+  /** Each live session's transcript, for the usage meter. */
+  meteredSessions(): MeteredSession[] {
+    const out: MeteredSession[] = [];
+    for (const s of this.sessions.values()) if (s.state !== 'ended') out.push({ id: s.id, transcript: s.transcriptPath });
+    return out;
+  }
+
+  /** Where the Lobby's detail reads the sessions' usage; null: the building does not meter it. */
+  setUsageSource(source: (() => ReadonlyMap<string, SessionUsage>) | null): void {
+    this.usageSource = source;
+  }
+
   /** The Lobby in detail for the browser; null without a gatekeeper. */
   lobbyDetail(): LobbyDetail | null {
-    return this.lobbyState && buildLobbyDetail(this.lobbyState, this.liveViews());
+    return this.lobbyState && buildLobbyDetail(this.lobbyState, this.liveViews(), this.now(), this.usageSource?.() ?? null);
   }
 
   /** The building every browser sees: façade, floor directory, attention and the Lobby's counts. */

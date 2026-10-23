@@ -2,6 +2,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { flushSync } from 'svelte';
 import Facade from '../../components/Facade.svelte';
 import source from '../../components/Facade.svelte?raw';
+import { FEATURE_SLOTS, slotOf } from '../../../src/scene/palette';
+import type { FloorSummary, LobbySummary } from '../../../src/scene/types';
 import { CHECKOUT, DOCS, NOW, ORDERS, makeScene } from '../helpers/fixtures';
 import { cleanup, render, text } from '../helpers/render';
 
@@ -15,19 +17,159 @@ function facade(floors = makeScene().floors, selected: string | null = null) {
   return { target, onFloor, onDesk, floor };
 }
 
+/** The Lobby's summary with a queue of eight and three more: one refused, the rest ready, the first ready one in a repository's colour. */
+const QUEUE: LobbySummary = {
+  doorman: 'Gordon',
+  refused: 1,
+  ready: 10,
+  seatsFull: 1,
+  memory: { pct: 30, gatePct: 75, warnPct: 85 },
+  held: false,
+  paused: 0,
+  queue: [
+    { id: 'G-1', name: 'G-1 turned away', kind: 'refused', slot: null, tie: 4, org: 'tenuta' },
+    ...Array.from({ length: 7 }, (_, i) => ({ id: `G-${10 + i}`, name: `G-${10 + i} ready`, kind: 'ready' as const, slot: i === 0 ? 3 : null, tie: i, org: i === 0 ? ('amatino' as const) : null })),
+  ],
+  queueMore: 3,
+  updatedAt: NOW,
+};
+
 describe('Facade', () => {
   it('makes the Lobby a button with its counts when a gatekeeper is configured, and leaves it as decor without', () => {
     const onLobby = vi.fn();
-    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { waiting: 3, seatsFull: 1, powerPct: 75, held: true, paused: 2, updatedAt: NOW }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { doorman: 'Gordon', refused: 3, ready: 2, seatsFull: 1, memory: { pct: 75, gatePct: 75, warnPct: 85 }, held: true, paused: 2, queue: [], queueMore: 0, updatedAt: NOW }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
     const lobby = target.querySelector('g.lobby')!;
     expect(lobby.getAttribute('role')).toBe('button');
-    expect(lobby.getAttribute('aria-label')).toBe('Lobby: 3 waiting, 1 seat full, power 75%, launches held');
-    expect([...lobby.querySelectorAll('.t-meta tspan')].map(text)).toEqual(['3 waiting', '1 seat full', 'power 75%', 'launches held']);
+    expect(lobby.getAttribute('aria-label')).toBe('Lobby: 3 refused, 2 ready, 1 seat full, session memory 75%, launches held');
+    expect([...lobby.querySelectorAll('.t-meta tspan')].map(text)).toEqual(['3 refused', '2 ready', '1 seat full', 'session memory 75%', 'launches held']);
+    // Only the refusals are red: tasks that are ready and wait for a go are not an alarm.
+    const [refused, ready] = [...lobby.querySelectorAll('.t-meta tspan')].map((t) => t.getAttribute('class') ?? '');
+    expect(refused).not.toBe(ready);
     lobby.dispatchEvent(new MouseEvent('click', { bubbles: true }));
     expect(onLobby).toHaveBeenCalled();
+    // A button that takes focus shows it: the Lobby has the outline a floor has, lit on hover and focus.
+    expect(lobby.querySelector('polygon.outline')!.getAttribute('points')).toMatch(/\d/);
     cleanup();
     const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
     expect(plain.querySelector('g.lobby')!.getAttribute('role')).toBeNull();
+    expect(plain.querySelector('g.lobby polygon.outline')).toBeNull();
+  });
+
+  it('draws the queue as micro-robots outside the doors: the refused with the needs badge, the ready with the clock, a group with its count beyond, the doorman at the door', () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const bots = [...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')];
+    expect(bots).toHaveLength(8);
+    expect(bots.filter((b) => b.classList.contains('badge-needs'))).toHaveLength(1);
+    expect(bots.filter((b) => b.classList.contains('badge-clock'))).toHaveLength(7);
+    expect(bots[0]!.classList.contains('badge-needs')).toBe(true);
+    // The body is the repository's slot when the queue names one, grey when not.
+    expect(bots[1]!.classList.contains('repo-3')).toBe(true);
+    expect([...bots[2]!.classList].some((c) => c.startsWith('repo-'))).toBe(false);
+    expect(bots.map((b) => text(b.querySelector('title')))).toEqual(['G-1 turned away', 'G-10 ready', 'G-11 ready', 'G-12 ready', 'G-13 ready', 'G-14 ready', 'G-15 ready', 'G-16 ready']);
+    expect(target.querySelectorAll('g.lobby .queue .bot.group')).toHaveLength(3);
+    expect(text(target.querySelector('g.lobby .queue .more-chip text'))).toBe('+3');
+    expect(text(target.querySelector('g.lobby .queue .more-chip title'))).toBe('3 more waiting');
+    const doorman = target.querySelector('g.lobby .queue .bot.doorman')!;
+    expect(text(doorman.querySelector('title'))).toBe('Gordon, at the door');
+    // Gordon wears a cap and carries a clipboard; the hard hat is the workflow agent's.
+    expect(doorman.querySelector('.cap')).not.toBeNull();
+    expect(doorman.querySelector('.clipboard')).not.toBeNull();
+    expect(doorman.querySelector('.hat')).toBeNull();
+  });
+
+  it("dresses each robot of the line in its task's tie, its organisation's lanyard and the brief in its hand", () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const bots = [...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')];
+    expect(bots[0]!.classList.contains('tie-4')).toBe(true);
+    expect(bots[3]!.classList.contains('tie-2')).toBe(true);
+    // The lanyard: a strap and a card, in the organisation's colour; none without an organisation.
+    expect(bots[0]!.classList.contains('org-tenuta')).toBe(true);
+    expect(bots[0]!.querySelectorAll('.lanyard')).toHaveLength(2);
+    expect(bots[1]!.classList.contains('org-amatino')).toBe(true);
+    expect(bots[2]!.querySelectorAll('.lanyard')).toHaveLength(0);
+    expect([...bots[2]!.classList].some((c) => c.startsWith('org-'))).toBe(false);
+    // Every launch in the line holds its brief; the group beyond and the doorman do not.
+    expect(bots.every((b) => b.querySelector('.folder') !== null)).toBe(true);
+    expect(target.querySelector('g.lobby .queue .bot.group .folder')).toBeNull();
+  });
+
+  it("rings the desks of a task across the floors, and joins them with a thread, while one of them is hovered", () => {
+    const floors: FloorSummary[] = makeScene().floors.map((f) => ({ ...f, windows: f.windows.map((w) => ({ ...w })) }));
+    const withSession = floors.flatMap((f, fi) => f.windows.map((w, wi) => ({ w, fi, wi }))).filter(({ w }) => w.sessionId !== null);
+    const [a, b, c] = withSession;
+    a!.w.task = 'G-7';
+    b!.w.task = 'G-7';
+    c!.w.task = 'G-8';
+    const target = render(Facade, { floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    const window = (x: { w: { sessionId: string | null } }) => target.querySelector(`[data-desk="${x.w.sessionId}"]`)!;
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
+    window(a!).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(2);
+    expect(target.querySelectorAll('.task-thread')).toHaveLength(1);
+    expect(target.querySelector('.task-ring')!.classList.contains(`tie-${slotOf('G-7', FEATURE_SLOTS)}`)).toBe(true);
+    // A task with one desk gets a ring and no thread.
+    window(c!).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect([target.querySelectorAll('.task-ring').length, target.querySelectorAll('.task-thread').length]).toEqual([1, 0]);
+    // Leaving a desk takes the rings away; a desk with no task rings nothing.
+    window(c!).dispatchEvent(new MouseEvent('mouseleave'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
+    const plain = withSession.find(({ w }) => w.task === null || w.task === undefined)!;
+    window(plain).dispatchEvent(new MouseEvent('mouseenter'));
+    flushSync();
+    expect(target.querySelectorAll('.task-ring')).toHaveLength(0);
+  });
+
+  it('draws no group when everything fits in the line, and the doorman still stands at the door with nobody waiting', () => {
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: QUEUE.queue.slice(0, 2), queueMore: 0, refused: 1, ready: 1 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman)')).toHaveLength(2);
+    expect(target.querySelector('.more-chip')).toBeNull();
+    cleanup();
+    const empty = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: [], queueMore: 0, refused: 0, ready: 0 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(empty.querySelectorAll('g.lobby .queue .bot:not(.doorman)')).toHaveLength(0);
+    expect(empty.querySelector('g.lobby .queue .bot.doorman')).not.toBeNull();
+  });
+
+  it('draws the sessions\' memory as a tank on the roof: its level, the gate\'s line and the watchdog\'s, turning amber and red past them', () => {
+    const tank = (memory: LobbySummary['memory']) => {
+      const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, memory }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+      const t = target.querySelector('g.roof .tank');
+      return { target, t };
+    };
+    const quiet = tank({ pct: 30, gatePct: 75, warnPct: 85 });
+    expect(quiet.t!.getAttribute('data-level')).toBe('30');
+    expect(text(quiet.t!.querySelector('title'))).toBe('Session memory 30%');
+    const tone = (el: Element | null | undefined) => ['warn', 'gate'].find((c) => el?.classList.contains(c)) ?? '';
+    expect([...quiet.t!.querySelectorAll('.mark')].map(tone)).toEqual(['gate', 'warn']);
+    expect(tone(quiet.t!.querySelector('.water'))).toBe('');
+    cleanup();
+    expect(tone(tank({ pct: 80, gatePct: 75, warnPct: 85 }).t!.querySelector('.water'))).toBe('gate');
+    cleanup();
+    expect(tone(tank({ pct: 90, gatePct: 75, warnPct: 85 }).t!.querySelector('.water'))).toBe('warn');
+    cleanup();
+    // No gate mark when the gatekeeper names none; no tank without a cap.
+    expect([...tank({ pct: 30, gatePct: null, warnPct: 85 }).t!.querySelectorAll('.mark')].map(tone)).toEqual(['warn']);
+    cleanup();
+    expect(tank(null).t).toBeNull();
+  });
+
+  it('draws every place of the line even when two launches carry the same id once cleaned', () => {
+    const twin = (name: string) => ({ id: 'G-7', name, kind: 'ready' as const, slot: null, tie: 0, org: null });
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: { ...QUEUE, queue: [twin('first'), twin('second')], queueMore: 0 }, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect([...target.querySelectorAll('g.lobby .queue .bot:not(.group):not(.doorman) title')].map(text)).toEqual(['first', 'second']);
+  });
+
+  it('draws nothing of the queue or the tank without a gatekeeper, and a click on a robot opens the Lobby', () => {
+    const plain = render(Facade, { floors: makeScene().floors, selected: null, lobby: null, onFloor: vi.fn(), onDesk: vi.fn(), onLobby: vi.fn() });
+    expect(plain.querySelector('.queue')).toBeNull();
+    expect(plain.querySelector('.tank')).toBeNull();
+    cleanup();
+    const onLobby = vi.fn();
+    const target = render(Facade, { floors: makeScene().floors, selected: null, lobby: QUEUE, onFloor: vi.fn(), onDesk: vi.fn(), onLobby });
+    target.querySelector('g.lobby .queue .bot')!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onLobby).toHaveBeenCalledTimes(1);
   });
 
   it('draws one floor button per floor, bottom-up, each named for a screen reader', () => {
@@ -88,7 +230,7 @@ describe('Facade', () => {
   });
 
   it('never draws the building below 80% of its size, where its text gets too small to read: the stage scrolls instead', () => {
-    const many = makeScene().floors.map((f) => ({ ...f, windows: Array.from({ length: 40 }, (_, i) => ({ sessionId: `${f.key}-${i}`, state: 'working' as const })) }));
+    const many = makeScene().floors.map((f) => ({ ...f, windows: Array.from({ length: 40 }, (_, i) => ({ sessionId: `${f.key}-${i}`, state: 'working' as const, task: null })) }));
     for (const floors of [makeScene().floors, many]) {
       const { target } = facade(floors);
       const svg = target.querySelector<SVGSVGElement>('svg.facade')!;

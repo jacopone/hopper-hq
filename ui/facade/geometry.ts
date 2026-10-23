@@ -76,6 +76,8 @@ export interface WindowShape {
   /** Null: a free desk, a dark window that leads nowhere. */
   sessionId: string | null;
   state: ShownState | null;
+  /** The orchestrator's task of the session at the desk; null when none. */
+  task: string | null;
   points: string;
   /** Someone is at the desk and the screen is on. */
   lit: boolean;
@@ -97,6 +99,30 @@ export interface FacadeFloor {
   label: Label;
 }
 
+/** The gatekeeper's part of the façade: the apron before the doors with the line of robots on it, the doorman, and the tank on the roof. */
+export interface GateModel {
+  apron: Box;
+  /** The line painted on the apron, from the doors outwards. */
+  line: Line;
+  /** Where the robots of the line stand (feet), the head of the line first, each further from the doors and nearer the viewer. */
+  slots: Point[];
+  /** Where the group beyond the line stands (feet); its counter is drawn to the right. */
+  more: Point;
+  /** Where the doorman stands (feet), beside the doors. */
+  doorman: Point;
+  /** The water tank: the centre of its base on the roof slab, the radii of its ellipses, its height on its legs. */
+  tank: { cx: number; cy: number; rx: number; ry: number; h: number; legH: number };
+}
+
+/** The apron's robots stand this far apart along the depth axis, in cells. */
+const GATE_STEP = 0.4;
+/** A robot stands about this tall on the page, its badge included. */
+const BOT_H = 34;
+/** The group's counter hangs under the group: half its widest, and how far below the group's feet its bottom edge is. */
+const CHIP_HALF = 24;
+const CHIP_DROP = 22;
+const TANK = { rx: 22, ry: 11, h: 34, legH: 11, cone: 13 } as const;
+
 export interface FacadeModel {
   viewBox: string;
   /** The viewBox's width and height. */
@@ -105,10 +131,12 @@ export interface FacadeModel {
   width: number;
   shadow: { cx: number; cy: number; rx: number; ry: number };
   plinth: Box;
-  lobby: { wall: Box; windows: string[]; doors: string[]; side: string; label: Label };
+  lobby: { wall: Box; windows: string[]; doors: string[]; side: string; label: Label; outline: string };
   /** Bottom-up, the order they are drawn in. */
   floors: FacadeFloor[];
   roof: { slab: Box; units: Box[]; mast: Line };
+  /** Null without a gatekeeper. */
+  gate: GateModel | null;
 }
 
 const LIT: ReadonlySet<ShownState> = new Set(['working', 'needs_you', 'done', 'in_meeting', 'no_signal']);
@@ -146,7 +174,7 @@ function labelAt(b: Bounds, anchor: Point, labelX: number, hasMeta: boolean): La
 
 /** The whole building for the scene's floors, listed top to bottom as the scene lists them. */
 /** `lobbyMeta`: the Lobby's label carries a meta line (a gatekeeper's counts), so its name moves up as a floor's does. */
-export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): FacadeModel {
+export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, withGate = false): FacadeModel {
   const b = new Bounds();
   const W = Math.max(MIN_WIDTH, ...floors.map((f) => f.windows.length));
   const D = DEPTH;
@@ -167,6 +195,8 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): Fa
     doors,
     side: points(onSide(W, 0.3, D - 0.3, 14, LOBBY_H - 10)),
     label: labelAt(b, project(W, 0, LOBBY_H / 2), labelX, lobbyMeta),
+    // The outline a floor has, over the lobby's front and side: what hover and focus light when the Lobby is a button.
+    outline: points([project(0, D, LOBBY_H), project(0, D, 0), project(W, D, 0), project(W, 0, 0), project(W, 0, LOBBY_H), project(W, D, LOBBY_H)]),
   };
 
   const stacked: FacadeFloor[] = [];
@@ -177,7 +207,7 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): Fa
     const slats: Line[] = [];
     for (let i = 0; i < f.windows.length; i++) {
       const w = f.windows[i]!;
-      windows.push({ sessionId: w.sessionId, state: w.state, points: points(onFront(D, i + 0.18, i + 0.82, z0 + 13, z0 + FLOOR_H - 6)), lit: w.state !== null && LIT.has(w.state) });
+      windows.push({ sessionId: w.sessionId, state: w.state, task: w.task, points: points(onFront(D, i + 0.18, i + 0.82, z0 + 13, z0 + FLOOR_H - 6)), lit: w.state !== null && LIT.has(w.state) });
       if (f.shutters) {
         for (let k = 1; k < 4; k++) {
           const z = z0 + 13 + (k * (FLOOR_H - 19)) / 4;
@@ -203,7 +233,39 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): Fa
 
   const zr = LOBBY_H + floors.length * FLOOR_H;
   const slab = b.box(-0.12, -0.12, W + 0.12, D + 0.12, zr, zr + 6);
-  const units = [b.box(0.6, 0.5, 1.9, 1.7, zr + 6, zr + 22), b.box(W - 2.3, 0.7, W - 1.1, 1.9, zr + 6, zr + 16)];
+  // With a gatekeeper the tank stands where the roof's first unit was.
+  const units = [...(withGate ? [] : [b.box(0.6, 0.5, 1.9, 1.7, zr + 6, zr + 22)]), b.box(W - 2.3, 0.7, W - 1.1, 1.9, zr + 6, zr + 16)];
+  let gate: GateModel | null = null;
+  if (withGate) {
+    const cx = doorAt + 1;
+    const yEnd = D + 0.8 + GATE_STEP * 8 + 1.5;
+    const apron = b.box(doorAt - 0.35, D + 0.4, doorAt + 2.35, yEnd, -6, 0);
+    const stand = (x: number, y: number): Point => {
+      const p = project(x, y, 0);
+      b.add([p[0] - 14, p[1] - BOT_H]);
+      b.add([p[0] + 14, p[1] + 3]);
+      return p;
+    };
+    const slots = Array.from({ length: 8 }, (_, i) => stand(cx, D + 0.8 + GATE_STEP * i));
+    const more = stand(cx, D + 0.8 + GATE_STEP * 8 + 0.2);
+    b.add([more[0] - CHIP_HALF, more[1] + CHIP_DROP]);
+    b.add([more[0] + CHIP_HALF, more[1] + CHIP_DROP]);
+    const doorman = stand(doorAt + 2.25, D + 0.45);
+    const [l0x, l0y] = project(cx, D + 0.55, 0);
+    const [l1x, l1y] = project(cx, yEnd - 0.6, 0);
+    const [tx, ty] = project(1.25, 1.1, zr + 6).map(r1) as Point;
+    // The cone is wider than the lid by 2 px a side; the front legs stand a third of a radius ahead of the centre.
+    b.add([tx - TANK.rx - 2, ty - TANK.legH - TANK.h - TANK.cone - 4]);
+    b.add([tx + TANK.rx + 2, ty + 0.35 * TANK.ry + 1]);
+    gate = {
+      apron,
+      line: [r1(l0x), r1(l0y), r1(l1x), r1(l1y)],
+      slots: slots.map(([x, y]) => [r1(x), r1(y)] as Point),
+      more: [r1(more[0]), r1(more[1])],
+      doorman: [r1(doorman[0]), r1(doorman[1])],
+      tank: { cx: tx, cy: ty, rx: TANK.rx, ry: TANK.ry, h: TANK.h, legH: TANK.legH },
+    };
+  }
   const [m0x, m0y] = b.add(project(W - 0.5, 0.5, zr + 6));
   const [m1x, m1y] = b.add(project(W - 0.5, 0.5, zr + 46));
 
@@ -222,5 +284,6 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false): Fa
     lobby,
     floors: stacked,
     roof: { slab, units, mast: [r1(m0x), r1(m0y), r1(m1x), r1(m1y)] },
+    gate,
   };
 }

@@ -485,7 +485,7 @@ export class FloorScene {
     const spots = internSpots(desk);
     const seats = keepSeats(this.internSeats.get(id) ?? new Map(), occupant.interns.filter((i) => i.running && !i.inRoom).map((i) => i.agentId), Math.min(INTERNS_MAX, spots.length));
     this.internSeats.set(id, seats);
-    const crew: Robot = { pose: 'still', badge: null, body: robot.body, tie: robot.tie };
+    const crew: Robot = { pose: 'still', badge: null, body: robot.body, tie: robot.tie, org: null };
     for (const [agentId, seat] of seats) {
       wanted.push({
         id: internKey(id, agentId),
@@ -514,7 +514,7 @@ export class FloorScene {
     const seats = keepSeats(this.roomSeats.get(key) ?? new Map(), room.agents.slice(0, room.counts.running).map((a) => a.agentId), SEATS_MAX);
     this.roomSeats.set(key, seats);
     const spots = seatSpots(room.rect);
-    const look: Robot = { pose: 'typing', badge: null, body: room.look.body, tie: room.look.tie };
+    const look: Robot = { pose: 'typing', badge: null, body: room.look.body, tie: room.look.tie, org: null };
     for (const [agentId, seat] of seats) {
       wanted.push({
         id: agentKey(key, agentId),
@@ -539,7 +539,7 @@ export class FloorScene {
   private cast(wanted: Cast[], now: number): void {
     for (const c of wanted) {
       let mover = this.movers.get(c.id);
-      if (mover && (mover.robot.body !== c.look.body || mover.robot.tie !== c.look.tie)) {
+      if (mover && (mover.robot.body !== c.look.body || mover.robot.tie !== c.look.tie || mover.robot.org !== c.look.org)) {
         this.drop(c.id, mover);
         mover = undefined;
       }

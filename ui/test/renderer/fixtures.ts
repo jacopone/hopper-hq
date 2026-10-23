@@ -68,9 +68,10 @@ export function makeOccupant(spec: DeskSpec, body: number, tie: number | null, c
     location: spec.cloud ? 'cloud' : 'local',
     account: null,
     task: null,
+    org: null,
     pane: null,
     focusable: false,
-    robot: look ? { ...look, body, tie } : null,
+    robot: look ? { ...look, body, tie, org: null } : null,
     at,
     checkout,
   };

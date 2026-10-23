@@ -93,7 +93,7 @@ describe('session ids', () => {
 
 describe('fetchLobby', () => {
   it('returns the detail, says when there is no gatekeeper, and never rejects', async () => {
-    const detail = { version: 7, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: 1 };
+    const detail = { version: 9, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], tasks: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: 1 };
     expect(await fetchLobby(async () => answer(200, detail))).toEqual({ ok: true, lobby: detail });
     expect(await fetchLobby(async () => answer(404, { error: 'No gatekeeper is configured' }))).toEqual({ ok: false, status: 404, error: 'No gatekeeper is configured' });
     expect(await fetchLobby(async () => answer(401, undefined))).toEqual({ ok: false, status: 401, error: SIGNED_OUT });

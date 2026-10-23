@@ -206,6 +206,21 @@ describe('the floor scene', () => {
     expect(fs.sessions.get('sw-a1')!.robot!.group.parent).toBe(fs.scene);
   });
 
+  it("rebuilds a robot whose account moves to another organisation: the lanyard changes colour", () => {
+    const fs = sceneOf();
+    const robot = fs.sessions.get('sw-a1')!.robot!;
+    expect(robot.org).toBeNull();
+    const floor = checkoutFloor();
+    const occupant = floor.pods.flatMap((p) => p.desks).map((d) => d.occupant).find((o) => o?.sessionId === 'sw-a1')!;
+    occupant.robot = { ...occupant.robot!, org: 'tenuta' };
+    fs.apply(floor);
+    const next = fs.sessions.get('sw-a1')!.robot!;
+    expect(next).not.toBe(robot);
+    expect(next.org).toBe('tenuta');
+    // The strap and the card, in the farm's colour.
+    expect(next.pickables.filter((m) => (m.material as unknown as { color: { getHexString(): string } }).color.getHexString() === 'f26b1d')).toHaveLength(2);
+  });
+
   it('keeps one robot per session wherever its occupant is: at its desk, resting in the lounge, at the head of its room', () => {
     const fs = sceneOf();
     const rest = fs.sessions.get('sw-c3')!;
@@ -1156,7 +1171,7 @@ describe('loops at rest', () => {
   };
   /** The same robot built anew where it stands, in its pose, and in its loop at `t` from `phase` when given. */
   function expected(o: RobotObject, look: Look, loop?: { t: number; phase: number }) {
-    const ref = buildRobot('ref', { ...look, body: 0, tie: null }, new Geometries(), new Materials(dayTheme()), o.kind);
+    const ref = buildRobot('ref', { ...look, body: 0, tie: null, org: null }, new Geometries(), new Materials(dayTheme()), o.kind);
     poseRobot(ref, look, { x: o.group.position.x, z: o.group.position.z, facing: o.group.rotation.y });
     if (loop) animateRobot(ref, look, loop.t, loop.phase);
     return limbs(ref);

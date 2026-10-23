@@ -84,8 +84,44 @@
 .fv-agents,
 .fv-remote,
 .fv-phase,
-.fv-counts {
+.fv-counts,
+.fv-task {
   color: var(--muted, #566173);
+}
+
+.fv-task {
+  font-family: var(--font-mono, ui-monospace, monospace);
+  font-size: 0.85em;
+}
+
+/* The organisation of the session's account: one letter on its colour, as on the lanyard. */
+.fv-org {
+  display: inline-grid;
+  place-items: center;
+  min-width: 1.35em;
+  height: 1.35em;
+  border-radius: 0.3em;
+  font: 700 0.78em var(--font-mono, ui-monospace, monospace);
+  color: #fff;
+  background: var(--org-other, #2b303b);
+  box-shadow: inset 0 0 0 1px var(--edge, #1c253124);
+}
+
+.fv-org-amatino {
+  background: var(--org-amatino, #1f4fd8);
+}
+
+.fv-org-tenuta {
+  background: var(--org-tenuta, #f26b1d);
+}
+
+.fv-org-personal {
+  background: var(--org-personal, #f4f1e8);
+  color: #18202b;
+}
+
+.fv-org-other {
+  background: var(--org-other, #2b303b);
 }
 
 /* A meeting room's tag, over its door: the meeting colour on its dot. */

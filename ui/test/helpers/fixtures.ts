@@ -4,7 +4,7 @@
  * (helpers/plan.ts). Each call returns fresh objects, so a test may change what it gets.
  */
 import { LOUNGE_SEATS, type PlanLayout } from '../../../src/scene/layout';
-import { FEATURE_SLOTS, REPO_SLOTS, slotOf } from '../../../src/scene/palette';
+import { FEATURE_SLOTS, REPO_SLOTS, orgOfAccount, slotOf } from '../../../src/scene/palette';
 import {
   SCENE_VERSION,
   type AttentionEntry,
@@ -265,13 +265,15 @@ function occupantOf(f: FloorSpec, c: CheckoutSpec, d: DeskSpec): Occupant {
     location: d.location ?? 'local',
     account: d.account ?? null,
     task: d.task ?? null,
+    org: orgOfAccount(d.account ?? null),
     pane: d.pane,
     focusable: focusable(d),
     robot: look && {
       pose: look.pose,
       badge: look.badge,
       body: slotOf(c.repo, REPO_SLOTS),
-      tie: f.kind === 'feature' ? slotOf(f.key.slice('feature:'.length), FEATURE_SLOTS) : null,
+      tie: f.kind === 'feature' ? slotOf(f.key.slice('feature:'.length), FEATURE_SLOTS) : d.task ? slotOf(d.task, FEATURE_SLOTS) : null,
+      org: orgOfAccount(d.account ?? null),
     },
     at: d.state === 'dormant' ? { kind: 'gone' } : { kind: 'desk' },
     checkout: checkoutOf(c),
@@ -297,7 +299,7 @@ function summary(f: FloorSpec, number: number): FloorSummary {
     name: f.name,
     repos: [...new Set(f.checkouts.map((c) => c.repo))].sort(),
     accounts: [...new Set(f.checkouts.flatMap((c) => c.desks.flatMap((d) => (d.account ? [d.account] : []))))].sort(),
-    windows: podsOf(f).pods.flatMap((p) => p.desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state } : { sessionId: null, state: null }))),
+    windows: podsOf(f).pods.flatMap((p) => p.desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state, task: d.occupant.task } : { sessionId: null, state: null, task: null }))),
     counts,
     shutters: desks.every((d) => d.state === 'dormant'),
     openedAt: f.openedAt,

@@ -61,6 +61,10 @@
   --repo-0: #3FB8B0; --repo-1: #E58FB9; --repo-2: #7C8FE8; --repo-3: #F2A65A; --repo-4: #7FBF6A; --repo-5: #B88BE0; --repo-6: #4FA3D9; --repo-7: #B7967A;
   --feature-0: #2E3A59; --feature-1: #7A2E4D; --feature-2: #1F5C4A; --feature-3: #8A4B14; --feature-4: #3D2E7A; --feature-5: #0F5A73; --feature-6: #5E5410; --feature-7: #7A1F1F;
   --feature-none: #4A5163;
+  --org-amatino: #1F4FD8;
+  --org-tenuta: #F26B1D;
+  --org-personal: #F4F1E8;
+  --org-other: #2B303B;
 
   /* Light intensities */
   --visor-int: 1; --window-int: 0.45; --lamp-int: 0.6; --screen-int: 0.9; --hemi-int: 1.15; --sun-int: 1.7;
@@ -84,6 +88,10 @@
     --repo-0: #3FB8B0; --repo-1: #E58FB9; --repo-2: #7C8FE8; --repo-3: #F2A65A; --repo-4: #7FBF6A; --repo-5: #B88BE0; --repo-6: #4FA3D9; --repo-7: #B7967A;
     --feature-0: #2E3A59; --feature-1: #7A2E4D; --feature-2: #1F5C4A; --feature-3: #8A4B14; --feature-4: #3D2E7A; --feature-5: #0F5A73; --feature-6: #5E5410; --feature-7: #7A1F1F;
     --feature-none: #4A5163;
+    --org-amatino: #4D7BFF;
+    --org-tenuta: #FF8A3D;
+    --org-personal: #F4F1E8;
+    --org-other: #8C94A6;
     --visor-int: 1.8; --window-int: 0.9; --lamp-int: 2.4; --screen-int: 2; --hemi-int: 0.6; --sun-int: 0.55;
   }
 }
@@ -105,5 +113,9 @@
   --repo-0: #3FB8B0; --repo-1: #E58FB9; --repo-2: #7C8FE8; --repo-3: #F2A65A; --repo-4: #7FBF6A; --repo-5: #B88BE0; --repo-6: #4FA3D9; --repo-7: #B7967A;
   --feature-0: #2E3A59; --feature-1: #7A2E4D; --feature-2: #1F5C4A; --feature-3: #8A4B14; --feature-4: #3D2E7A; --feature-5: #0F5A73; --feature-6: #5E5410; --feature-7: #7A1F1F;
   --feature-none: #4A5163;
+  --org-amatino: #4D7BFF;
+  --org-tenuta: #FF8A3D;
+  --org-personal: #F4F1E8;
+  --org-other: #8C94A6;
   --visor-int: 1.8; --window-int: 0.9; --lamp-int: 2.4; --screen-int: 2; --hemi-int: 0.6; --sun-int: 0.55;
 }

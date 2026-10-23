@@ -3,7 +3,7 @@ import { mkdtemp, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readPower, timeOf,
+  buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskInfo, parseTaskPanes, parseWatchdogTail, readCpu, readPower, timeOf,
 } from '../../src/adapters/gatekeepers/gordon-files.js';
 
 const NOW = Date.parse('2026-10-16T14:02:30+02:00');
@@ -13,6 +13,19 @@ describe('timeOf', () => {
     expect(timeOf('2026-10-16T14:02:11+02:00')).toBe(Date.parse('2026-10-16T14:02:11+02:00'));
     expect(timeOf(1792150178)).toBe(1792150178_000);
     for (const v of ['soon', '', null, undefined, {}, -1]) expect(timeOf(v)).toBeNull();
+  });
+
+  it("reads Gordon's registry dates ('2026-10-06 10:06', no offset) in the machine's own time zone", () => {
+    const tz = process.env.TZ;
+    try {
+      process.env.TZ = 'Europe/Rome';
+      expect(timeOf('2026-10-06 10:06')).toBe(Date.parse('2026-10-06T10:06:00+02:00'));
+      process.env.TZ = 'UTC';
+      expect(timeOf('2026-10-06 10:06')).toBe(Date.parse('2026-10-06T10:06:00Z'));
+    } finally {
+      if (tz === undefined) delete process.env.TZ;
+      else process.env.TZ = tz;
+    }
   });
 });
 
@@ -41,8 +54,8 @@ describe('parseLobbyFile', () => {
       at: Date.parse('2026-10-16T14:02:11+02:00'),
     });
     expect(l.queue).toEqual([
-      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" } },
-      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null },
+      { id: 'G-270', name: 'G-270 segnali a J', profile: 'leonardo', since: Date.parse('2026-10-16T13:58:00+02:00'), reason: { kind: 'slice', text: "slice delle sessioni al 84% del tetto (watchdog all'85%)" }, kind: 'refused', area: null, repo: null },
+      { id: 'G-271', name: 'G-271 medic v2', profile: null, since: 1792150000_000, reason: null, kind: 'refused', area: null, repo: null },
     ]);
     expect(l.working).toBe(6);
   });
@@ -50,7 +63,66 @@ describe('parseLobbyFile', () => {
   it('reads a VIA verdict as go with no reasons, and is null for anything that is not the file', () => {
     expect(parseLobbyFile(JSON.stringify({ gate: { verdict: 'VIA', text: 'VIA: memoria 34 GB, slice 72%' } }))).toMatchObject({ gate: { go: true, reasons: [] }, queue: [], working: null, updatedAt: null });
     for (const bad of ['', '{', '[]', 'null', '"x"']) expect(parseLobbyFile(bad)).toBeNull();
-    expect(parseLobbyFile('{}')).toEqual({ gate: null, queue: [], working: null, updatedAt: null });
+    expect(parseLobbyFile('{}')).toEqual({ gate: null, queue: [], working: null, updatedAt: null, machine: null, plan: null });
+  });
+
+  it('tells a refused launch from a ready task, keeps the file order, and takes an entry with no kind for a refusal', () => {
+    const l = parseLobbyFile(JSON.stringify({
+      waiting: [
+        { id: 'G-1', name: 'a', reason: 'carico 49 > 0,75×24 thread', kind: 'rifiutata' },
+        { id: 'G-3', name: 'c', reason: 'pronta: brief scritto', kind: 'pronta' },
+        { id: 'G-2', name: 'b', reason: 'pronta: brief scritto', kind: 'pronta' },
+        { id: 'G-4', name: 'd' },
+        { id: 'G-5', name: 'e', kind: 'altro' },
+      ],
+    }))!;
+    expect(l.queue.map((w) => [w.id, w.kind])).toEqual([['G-1', 'refused'], ['G-3', 'ready'], ['G-2', 'ready'], ['G-4', 'refused'], ['G-5', 'refused']]);
+  });
+
+  it("reads the area and the repository the orchestrator gives a waiting task, and none when it gives none or something that is not text", () => {
+    const l = parseLobbyFile(JSON.stringify({
+      waiting: [
+        { id: 'G-1', name: 'a', kind: 'pronta', area: 'tenuta', repo: 'nixos' },
+        { id: 'G-2', name: 'b', kind: 'pronta' },
+        { id: 'G-3', name: 'c', kind: 'pronta', area: 7, repo: ['x'] },
+      ],
+    }))!;
+    expect(l.queue.map((w) => [w.id, w.area, w.repo])).toEqual([['G-1', 'tenuta', 'nixos'], ['G-2', null, null], ['G-3', null, null]]);
+  });
+
+  it("reads the machine as the doorman measured it, and the capacity plan line; what is not a number, or a count of zero, is null", () => {
+    const l = parseLobbyFile(JSON.stringify({
+      updated_at: '2026-10-18T15:27:10+02:00',
+      machine: { mem_gb: 34, mem_total_gb: 62, slice_pct: 23, load: 1, threads: 24, disk_busy_pct: 0, psi_mem_pct: 0, rebuild: false, cpu_mhz: 1713, nproc: 24 },
+      capacity: { sessions_max: 7, working: 1, slots_free: 6, plan: 'tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)' },
+    }))!;
+    expect(l.machine).toEqual({
+      memAvailableGb: 34, memTotalGb: 62, slicePct: 23, load: 1, threads: 24, diskBusyPct: 0, psiMemPct: 0, rebuild: false, cpuMhz: 1713, cpuBraking: null, nproc: 24,
+    });
+    expect(l.plan).toBe('tetto 7, al lavoro 1, liberi 6 · macchina VIA · in fila 18 (0 rifiutate, 18 pronte)');
+    const odd = parseLobbyFile(JSON.stringify({ machine: { mem_gb: '34', mem_total_gb: 0, slice_pct: -1, load: null, threads: 0, nproc: 0, rebuild: 'no' }, capacity: { plan: 7 } }))!;
+    expect(odd.machine).toEqual({
+      memAvailableGb: null, memTotalGb: null, slicePct: null, load: null, threads: null, diskBusyPct: null, psiMemPct: null, rebuild: null, cpuMhz: null, cpuBraking: null, nproc: null,
+    });
+    expect(odd.plan).toBeNull();
+    for (const bad of [{ machine: [] }, { machine: 'x' }, { machine: null }, {}]) expect(parseLobbyFile(JSON.stringify(bad))!.machine).toBeNull();
+  });
+});
+
+describe('readCpu', () => {
+  it('reads the load, the mean MHz and the processors from a /proc directory', async () => {
+    const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
+    await writeFile(join(proc, 'loadavg'), '1.27 0.98 0.80 3/1893 3262771\n');
+    await writeFile(join(proc, 'cpuinfo'), ['processor\t: 0', 'cpu MHz\t\t: 600.000', '', 'processor\t: 1', 'cpu MHz\t\t: 1800.000', ''].join('\n'));
+    expect(await readCpu(proc)).toEqual({ load: 1.27, mhz: 1200, mhzMax: 1800, nproc: 2 });
+  });
+
+  it('gives null for what it cannot read', async () => {
+    const proc = await mkdtemp(join(tmpdir(), 'shq-proc-'));
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, mhzMax: null, nproc: null });
+    await writeFile(join(proc, 'loadavg'), 'busy\n');
+    await writeFile(join(proc, 'cpuinfo'), 'model name\t: x\n');
+    expect(await readCpu(proc)).toEqual({ load: null, mhz: null, mhzMax: null, nproc: null });
   });
 });
 
@@ -75,6 +147,30 @@ describe('parseLimits and parseWatchdogTail', () => {
     expect(parseWatchdogTail(log + '\n16:48 avvio: soglie mem full avg10 ≥15% per 1\'')).toEqual({ pausedPanes: [], held: false });
     // A pane that is not herdr's is not a pane.
     expect(parseWatchdogTail('WATCHDOG: x → lanci fermati, pausa mandata a: wE:p1E %7 rm;-rf')).toEqual({ pausedPanes: ['wE:p1E'], held: true });
+  });
+});
+
+describe('parseTaskInfo', () => {
+  it("folds the registry's events into each task's repository and area, the last word winning, and takes the area of a repository as the registry does when none is written", () => {
+    const text = [
+      { ev: 'add', id: 'G-1', repo: 'nixos', title: 'x' },
+      { ev: 'add', id: 'G-2', repo: 'app', area: 'tenuta' },
+      { ev: 'update', id: 'G-2', note: 'later, without a word on either' },
+      { ev: 'add', id: 'G-3', repo: 'vari' },
+      { ev: 'update', id: 'G-3', repo: 'lf' },
+      { ev: 'add', id: 'G-4', repo: 'unknown' },
+      { ev: 'add', id: 'G-5' },
+      { ev: 'add', id: 'G-6', repo: 'app', area: 'elsewhere' },
+    ].map((e) => JSON.stringify(e)).join('\n') + '\nnot json\n';
+    const info = parseTaskInfo(text);
+    expect([...info]).toEqual([
+      ['G-1', { repo: 'nixos', area: 'personali' }],
+      ['G-2', { repo: 'app', area: 'tenuta' }],
+      ['G-3', { repo: 'lf', area: 'amatino' }],
+      ['G-4', { repo: 'unknown', area: null }],
+      ['G-5', { repo: null, area: null }],
+      ['G-6', { repo: 'app', area: 'amatino' }],
+    ]);
   });
 });
 

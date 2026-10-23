@@ -49,21 +49,35 @@ function posed() {
 describe('robots', () => {
   it('wears the repo colour on its body and the feature colour on its tie', () => {
     const { geo, mats } = kit();
-    const robot: Robot = { pose: 'typing', badge: 'typing', body: 5, tie: 3 };
+    const robot: Robot = { pose: 'typing', badge: 'typing', body: 5, tie: 3, org: null };
     const obj = buildRobot('s1', robot, geo, mats);
     const used = new Set(obj.pickables.map((m) => m.material));
     expect(used.has(mats.body(5))).toBe(true);
     expect(used.has(mats.joint(5))).toBe(true);
     expect(obj.pickables.filter((m) => m.material === mats.tie(3))).toHaveLength(2);
     expect(used.has(mats.surface.visor)).toBe(true);
-    const plain = buildRobot('s2', { ...robot, tie: null }, geo, mats);
+    const plain = buildRobot('s2', { ...robot, tie: null, org: null }, geo, mats);
     expect(plain.pickables.filter((m) => m.material === mats.tie(null))).toHaveLength(2);
     expect([obj.body, obj.tie, plain.tie]).toEqual([5, 3, null]);
   });
 
+  it("hangs a lanyard in its organisation's colour on a robot whose account has one, and none on one whose account has none", () => {
+    const { geo, mats } = kit();
+    const robot: Robot = { pose: 'typing', badge: 'typing', body: 5, tie: 3, org: 'tenuta' };
+    const obj = buildRobot('s1', robot, geo, mats);
+    // The strap and the card: two meshes, neither casting a shadow.
+    const lanyard = obj.pickables.filter((m) => m.material === mats.org('tenuta'));
+    expect(lanyard).toHaveLength(2);
+    expect(lanyard.some((m) => m.castShadow)).toBe(false);
+    expect(obj.org).toBe('tenuta');
+    const bare = buildRobot('s2', { ...robot, org: null }, geo, mats);
+    expect(bare.pickables.filter((m) => [mats.org('amatino'), mats.org('tenuta'), mats.org('personal'), mats.org('other')].includes(m.material as never))).toHaveLength(0);
+    expect(bare.org).toBeNull();
+  });
+
   it('lets only its larger parts cast shadows: legs, torso, arms, head and the paper', () => {
     const { geo, mats } = kit();
-    const obj = buildRobot('s1', { pose: 'holding', badge: 'done', body: 2, tie: 3 }, geo, mats);
+    const obj = buildRobot('s1', { pose: 'holding', badge: 'done', body: 2, tie: 3, org: null }, geo, mats);
     const casters = obj.pickables.filter((m) => m.castShadow);
     expect(casters).toHaveLength(7);
     expect(casters.filter((m) => m.material === mats.body(2))).toHaveLength(1);
@@ -73,7 +87,7 @@ describe('robots', () => {
 
   it('can be picked by any of its parts', () => {
     const { geo, mats } = kit();
-    const obj = buildRobot('s1', { pose: 'waving', badge: 'needs', body: 0, tie: null }, geo, mats);
+    const obj = buildRobot('s1', { pose: 'waving', badge: 'needs', body: 0, tie: null, org: null }, geo, mats);
     let count = 0;
     obj.group.traverse((o) => {
       if (o instanceof Mesh) count++;
@@ -84,7 +98,7 @@ describe('robots', () => {
 
   it('turns the limb pivots for each pose', () => {
     const { geo, mats } = kit();
-    const obj = buildRobot('s1', { pose: 'typing', badge: 'typing', body: 0, tie: null }, geo, mats);
+    const obj = buildRobot('s1', { pose: 'typing', badge: 'typing', body: 0, tie: null, org: null }, geo, mats);
     const spot = { x: 3, z: 4, facing: Math.PI };
     for (const pose of Object.keys(POSES) as Array<keyof typeof POSES>) {
       poseRobot(obj, { pose, badge: null }, spot);
@@ -106,7 +120,7 @@ describe('robots', () => {
 
   it('strides on its way: on its feet at its point, facing its way, one leg forward and the other arm with it, bobbing at its size', () => {
     const { geo, mats } = kit();
-    const obj = buildRobot('s1', { pose: 'holding', badge: 'done', body: 0, tie: null }, geo, mats);
+    const obj = buildRobot('s1', { pose: 'holding', badge: 'done', body: 0, tie: null, org: null }, geo, mats);
     poseRobot(obj, { pose: 'holding', badge: 'done' }, { x: 0, z: 0, facing: 0 });
     const r = obj.rig;
     const limbs = () => [r.legL.rotation.x, r.legR.rotation.x, r.armL.rotation.x, r.armR.rotation.x];
@@ -123,10 +137,10 @@ describe('robots', () => {
     // Between, legs together, it is at the top of its bob: a workflow agent bobs less, and an intern flies.
     strideRobot(obj, { x: 3, z: 5, facing: 0 }, 0);
     expect([obj.group.position.y, Math.abs(r.legL.rotation.x), Math.abs(r.legR.rotation.x)]).toEqual([STRIDE.bob, 0, 0]);
-    const agent = buildRobot('a1', { pose: 'typing', badge: null, body: 0, tie: null }, geo, mats, 'workflow');
+    const agent = buildRobot('a1', { pose: 'typing', badge: null, body: 0, tie: null, org: null }, geo, mats, 'workflow');
     strideRobot(agent, { x: 0, z: 0, facing: 0 }, 0);
     expect(agent.group.position.y).toBeCloseTo(STRIDE.bob * KIND_SCALE.workflow, 10);
-    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 0, tie: null }, geo, mats, 'intern');
+    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 0, tie: null, org: null }, geo, mats, 'intern');
     strideRobot(intern, { x: 1, z: 2, facing: 0 }, quarter);
     expect([intern.group.position.x, intern.group.position.y, intern.group.position.z]).toEqual([1, HOVER_Y, 2]);
     // At its place again, it takes its pose.
@@ -176,7 +190,7 @@ describe('robots', () => {
 
   it('builds a workflow agent at 0.8, in a hard hat of the hard-hat colour, with its legs and its tie', () => {
     const { geo, mats } = kit();
-    const robot: Robot = { pose: 'typing', badge: null, body: 5, tie: 3 };
+    const robot: Robot = { pose: 'typing', badge: null, body: 5, tie: 3, org: null };
     const session = buildRobot('s1', robot, geo, mats);
     const agent = buildRobot('a1', robot, geo, mats, 'workflow');
     expect([session.kind, session.group.scale.x, agent.kind, agent.group.scale.x]).toEqual(['session', 1, 'workflow', 0.8]);
@@ -202,7 +216,7 @@ describe('robots', () => {
 
   it('builds an intern at 0.55, with a jetpack on its back and no legs below the hip', () => {
     const { geo, mats } = kit();
-    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 2, tie: 4 }, geo, mats, 'intern');
+    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 2, tie: 4, org: null }, geo, mats, 'intern');
     expect([intern.kind, intern.group.scale.x]).toEqual(['intern', 0.55]);
     expect([intern.rig.legL.children, intern.rig.legR.children]).toEqual([[], []]);
     const tanks = intern.pickables.filter((m) => m.material === mats.surface.jet);
@@ -225,7 +239,7 @@ describe('robots', () => {
     const spot = { x: 3, z: 4, facing: 0 };
     const look = { pose: 'typing', badge: null } as const;
     const kinds: RobotKind[] = ['session', 'workflow', 'intern'];
-    const bots = kinds.map((kind) => buildRobot(kind, { ...look, body: 0, tie: null }, geo, mats, kind));
+    const bots = kinds.map((kind) => buildRobot(kind, { ...look, body: 0, tie: null, org: null }, geo, mats, kind));
     // Closed away until a robot sits at a table.
     expect(bots.map((b) => b.rig.laptop.visible)).toEqual([false, false, false]);
     for (const b of bots) poseRobot(b, look, spot);
@@ -255,12 +269,12 @@ describe('robots', () => {
   it('sits a workflow agent on its chair at its own size, and hovers an intern whatever its pose', () => {
     const { geo, mats } = kit();
     const spot = { x: 3, z: 4, facing: Math.PI };
-    const agent = buildRobot('a1', { pose: 'typing', badge: null, body: 0, tie: null }, geo, mats, 'workflow');
+    const agent = buildRobot('a1', { pose: 'typing', badge: null, body: 0, tie: null, org: null }, geo, mats, 'workflow');
     poseRobot(agent, { pose: 'typing', badge: null }, spot);
     // Its hips, BOT.hip up its scaled legs, rest on the seat.
     expect(agent.group.position.y + BOT.hip * 0.8).toBeCloseTo(SEAT_Y, 10);
     expect([agent.group.position.x, agent.group.position.z, agent.group.rotation.y]).toEqual([3, 4, Math.PI]);
-    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 0, tie: null }, geo, mats, 'intern');
+    const intern = buildRobot('p1', { pose: 'still', badge: null, body: 0, tie: null, org: null }, geo, mats, 'intern');
     for (const pose of ['still', 'typing', 'holding', 'waving', 'resting'] as const) {
       poseRobot(intern, { pose, badge: null }, spot);
       expect(intern.group.position.y, pose).toBe(HOVER_Y);
@@ -274,7 +288,7 @@ describe('robots', () => {
 
   it('lets the hard hat cast a shadow, but not its brim, and an intern cast none', () => {
     const { geo, mats } = kit();
-    const robot: Robot = { pose: 'holding', badge: 'done', body: 2, tie: 3 };
+    const robot: Robot = { pose: 'holding', badge: 'done', body: 2, tie: 3, org: null };
     const agent = buildRobot('a1', robot, geo, mats, 'workflow');
     const casters = agent.pickables.filter((m) => m.castShadow);
     expect(casters).toHaveLength(8);
@@ -287,15 +301,15 @@ describe('robots', () => {
 
   it('shares its geometries with every other robot', () => {
     const { geo, mats } = kit();
-    buildRobot('a', { pose: 'typing', badge: 'typing', body: 0, tie: 1 }, geo, mats);
+    buildRobot('a', { pose: 'typing', badge: 'typing', body: 0, tie: 1, org: null }, geo, mats);
     const size = geo.size;
-    buildRobot('b', { pose: 'holding', badge: 'done', body: 3, tie: null }, geo, mats);
+    buildRobot('b', { pose: 'holding', badge: 'done', body: 3, tie: null, org: null }, geo, mats);
     expect(geo.size).toBe(size);
-    buildRobot('c', { pose: 'typing', badge: null, body: 1, tie: 2 }, geo, mats, 'workflow');
-    buildRobot('d', { pose: 'still', badge: null, body: 1, tie: 2 }, geo, mats, 'intern');
+    buildRobot('c', { pose: 'typing', badge: null, body: 1, tie: 2, org: null }, geo, mats, 'workflow');
+    buildRobot('d', { pose: 'still', badge: null, body: 1, tie: 2, org: null }, geo, mats, 'intern');
     const kinds = geo.size;
-    buildRobot('e', { pose: 'typing', badge: null, body: 4, tie: null }, geo, mats, 'workflow');
-    buildRobot('f', { pose: 'still', badge: null, body: 6, tie: 0 }, geo, mats, 'intern');
+    buildRobot('e', { pose: 'typing', badge: null, body: 4, tie: null, org: null }, geo, mats, 'workflow');
+    buildRobot('f', { pose: 'still', badge: null, body: 6, tie: 0, org: null }, geo, mats, 'intern');
     expect(geo.size).toBe(kinds);
   });
 });
@@ -306,7 +320,7 @@ describe('loops at rest', () => {
   /** A robot of this kind in this look, in its pose at SPOT. */
   function rested(look: Look, kind: RobotKind = 'session'): RobotObject {
     const { geo, mats } = kit();
-    const obj = buildRobot('s1', { ...look, body: 0, tie: null }, geo, mats, kind);
+    const obj = buildRobot('s1', { ...look, body: 0, tie: null, org: null }, geo, mats, kind);
     poseRobot(obj, look, SPOT);
     return obj;
   }

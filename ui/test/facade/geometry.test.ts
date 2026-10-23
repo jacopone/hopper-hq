@@ -20,7 +20,7 @@ function everyPoint(m: FacadeModel): Array<[number, number]> {
 
 function floorWith(n: number, overrides: Partial<FloorSummary> = {}): FloorSummary {
   const f = makeScene().floors[0]!;
-  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const })), ...overrides };
+  return { ...f, windows: Array.from({ length: n }, (_, i) => ({ sessionId: `s${i}`, state: 'working' as const, task: null })), ...overrides };
 }
 
 describe('façade geometry', () => {
@@ -109,6 +109,74 @@ describe('façade geometry', () => {
       }
       expect(x + w).toBeGreaterThanOrEqual((m.width * TW) / 2 + 40 + LABEL_W);
     }
+  });
+
+  it('draws no apron, queue or tank without a gatekeeper', () => {
+    const m = facadeOf(makeScene().floors);
+    expect(m.gate).toBeNull();
+    expect(m.roof.units).toHaveLength(2);
+  });
+
+  it('lays an apron before the two doors with eight places in a line going away from them, one for the group beyond and one for the doorman', () => {
+    const m = facadeOf(makeScene().floors, true, true);
+    const g = m.gate!;
+    expect(g.slots).toHaveLength(8);
+    // The line leaves the door towards the viewer: every place is lower on the page and further left than the one before.
+    for (let i = 1; i < g.slots.length; i++) {
+      expect(g.slots[i]![1]).toBeGreaterThan(g.slots[i - 1]![1]);
+      expect(g.slots[i]![0]).toBeLessThan(g.slots[i - 1]![0]);
+    }
+    expect(g.more[1]).toBeGreaterThan(g.slots[7]![1]);
+    expect(g.more[0]).toBeLessThan(g.slots[7]![0]);
+    // The head of the line stands at the doors, the doorman beside them.
+    const doorXs = m.lobby.doors.flatMap((d) => d.split(' ').map((p) => Number(p.split(',')[0])));
+    const [from, to] = [Math.min(...doorXs), Math.max(...doorXs)];
+    expect(g.slots[0]![0]).toBeGreaterThanOrEqual(from - TW / 2);
+    expect(g.slots[0]![0]).toBeLessThanOrEqual(to + TW / 2);
+    expect(g.doorman[1]).toBeLessThan(g.slots[7]![1]);
+    // The apron is a slab at the plinth's height, in front of the plinth.
+    expect(g.apron.top).not.toBe(m.plinth.top);
+  });
+
+  it("swaps the roof's first unit for the water tank, which stands on the slab", () => {
+    const m = facadeOf(makeScene().floors, true, true);
+    expect(m.roof.units).toHaveLength(1);
+    expect(m.gate!.tank).toMatchObject({ rx: 22, ry: 11, h: 34, legH: 11 });
+    const zr = LOBBY_H + m.floors.length * FLOOR_H;
+    expect([m.gate!.tank.cx, m.gate!.tank.cy]).toEqual(project(1.25, 1.1, zr + 6).map((n) => Math.round(n * 10) / 10));
+  });
+
+  it('frames the apron, the robots standing on it, the doorman and the tank in the viewBox', () => {
+    for (const floors of [makeScene().floors, [floorWith(12)], []]) {
+      const m = facadeOf(floors, true, true);
+      const g = m.gate!;
+      const [x, y, w, h] = m.viewBox.split(' ').map(Number) as [number, number, number, number];
+      const inside = (px: number, py: number) => {
+        expect(px).toBeGreaterThanOrEqual(x);
+        expect(px).toBeLessThanOrEqual(x + w);
+        expect(py).toBeGreaterThanOrEqual(y);
+        expect(py).toBeLessThanOrEqual(y + h);
+      };
+      for (const face of [g.apron.top, g.apron.left, g.apron.right]) for (const p of face.split(' ')) inside(...(p.split(',').map(Number) as [number, number]));
+      // A robot is about 30 px tall, and its group's counter stands to the right.
+      for (const [px, py] of [...g.slots, g.more, g.doorman]) { inside(px, py); inside(px, py - 34); }
+      // The counter hangs under the group, 36 px wide at the most and 20 px below its feet.
+      inside(g.more[0] - 18, g.more[1] + 20);
+      inside(g.more[0] + 18, g.more[1] + 20);
+      // The tank: its cone is 2 px wider a side than the lid and 13 px over it; its front legs reach a third of a radius below the base.
+      inside(g.tank.cx - g.tank.rx - 2, g.tank.cy - g.tank.legH - g.tank.h - 13);
+      inside(g.tank.cx + g.tank.rx + 2, g.tank.cy + 0.35 * g.tank.ry);
+    }
+  });
+
+  it("hangs the group's counter clear of the last robot of the line", () => {
+    const g = facadeOf(makeScene().floors, true, true).gate!;
+    const last = g.slots[7]!;
+    // The counter spans 18 px either side of the group and from 6 to 20 px below its feet; a robot spans 14 px either side of its feet and 34 up to 3 down.
+    const chip = { x0: g.more[0] - 18, x1: g.more[0] + 18, y0: g.more[1] + 6, y1: g.more[1] + 20 };
+    const bot = { x0: last[0] - 14, x1: last[0] + 14, y0: last[1] - 34, y1: last[1] + 3 };
+    const overlap = chip.x0 < bot.x1 && bot.x0 < chip.x1 && chip.y0 < bot.y1 && bot.y0 < chip.y1;
+    expect(overlap).toBe(false);
   });
 
   it('keeps an empty building to its lobby and roof', () => {

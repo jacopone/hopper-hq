@@ -42,6 +42,18 @@ describe("the gatekeeper's task events", () => {
     await c.ingest(hook({ type: 'session.seen', sessionId: 'S2', name: 'orders-api-a1', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
     expect(c.session('S2')?.task).toBe('G-9');
   });
+
+  it("keeps the task a session's name gives when the registry names another for its pane: the name comes first, so the task does not flap", async () => {
+    const c = collector();
+    await c.ingest(hook({ type: 'session.seen', name: 'G-268 hopper-hq', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' } }));
+    let changes = 0;
+    c.onChange(() => changes++);
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: 'G-301' });
+    expect(c.session('S1')?.task).toBe('G-268');
+    await c.ingest({ type: 'task', sessionId: 'S1', ts: NOW, source: 'gatekeeper', task: null });
+    expect(c.session('S1')?.task).toBe('G-268');
+    expect(changes).toBe(0);
+  });
 });
 
 describe('the Lobby', () => {
@@ -49,15 +61,26 @@ describe('the Lobby', () => {
     const c = collector();
     let told = 0;
     c.onChange(() => told++);
-    const lobby = { doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: { working: 1, max: 7 }, updatedAt: NOW };
+    const lobby = { doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: { working: 1, max: 7 }, machine: null, limits: null, plan: null, updatedAt: NOW };
     expect(c.scene().lobby).toBeNull();
     c.setLobby(lobby);
     c.setLobby({ ...lobby });
     expect(told).toBe(1);
-    expect(c.scene().lobby).toEqual({ waiting: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW });
-    expect(c.lobbyDetail()).toMatchObject({ version: 7, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
+    expect(c.scene().lobby).toEqual({ doorman: 'Gordon', refused: 0, ready: 0, seatsFull: 0, memory: null, held: false, paused: 0, queue: [], queueMore: 0, updatedAt: NOW });
+    expect(c.lobbyDetail()).toMatchObject({ version: 9, doorman: { name: 'Gordon', sessionId: null }, cap: { working: 1, max: 7 } });
     await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, tmuxPane: 'wK:p2' }));
     expect([...c.localPanes()]).toEqual([['S1', 'wK:p2']]);
+  });
+
+  it("hands the meter each live session's transcript, and puts what it read in the Lobby's detail", async () => {
+    const c = collector();
+    c.setLobby({ doorman: { name: 'Gordon' }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, machine: null, limits: null, plan: null, updatedAt: NOW });
+    expect(c.lobbyDetail()!.usage).toBeNull();
+    await c.ingest(hook({ type: 'session.seen', workspace: { cwd: '/w/orders-api', repoRoot: '/w/orders-api', repoName: 'orders-api', worktree: false, branch: 'main' }, transcriptPath: '/t/S1.jsonl' }));
+    expect(c.meteredSessions()).toEqual([{ id: 'S1', transcript: '/t/S1.jsonl' }]);
+    const main = { tokens: { input: 1, cacheWrite: 0, cacheRead: 0, output: 2 }, costUsd: 0.5, unpricedTokens: 0, models: [], replies: 1, done: true };
+    c.setUsageSource(() => new Map([['S1', { main, subagents: [] }]]));
+    expect(c.lobbyDetail()!.usage!.total).toMatchObject({ costUsd: 0.5, tokens: { output: 2 } });
   });
 });
 

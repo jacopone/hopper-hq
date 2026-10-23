@@ -67,14 +67,37 @@ describe('App shell', () => {
 
   it('opens the Lobby from its route, with a crumb, and asks the daemon for its detail', async () => {
     location.hash = '#/lobby';
-    const fetchLobby = vi.fn(async () => ({ ok: true as const, lobby: { version: 7 as const, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], seats: [], turnTo: null, power: null, cap: null, updatedAt: NOW } }));
+    const fetchLobby = vi.fn(async () => ({ ok: true as const, lobby: { version: 9 as const, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], tasks: [], seats: [], turnTo: null, power: null, cap: null, machine: null, limits: null, capacity: { plan: null, byCap: null, bySeats: 0, slotsFree: null, binds: null, nextReset: null }, seatLimitPct: 80, usage: null, updatedAt: NOW } }));
     const scene = makeScene();
-    scene.lobby = { waiting: 0, seatsFull: 0, powerPct: null, held: false, paused: 0, updatedAt: NOW };
+    scene.lobby = { doorman: 'Gordon', refused: 0, ready: 0, seatsFull: 0, memory: null, held: false, paused: 0, queue: [], queueMore: 0, updatedAt: NOW };
     const { target, crumbs } = app(fakeStore({ scene }), { api: { fetchLobby } });
     await settle();
     expect(crumbs()).toBe('Building / Lobby');
     expect(fetchLobby).toHaveBeenCalled();
     expect(text(target.querySelector('.panel h2'))).toBe('The gate of Gordon');
+    // Once its detail is in, the stage draws the Lobby, not the façade: the Lobby's button is not there to press again.
+    expect(target.querySelector('g.lobby')).toBeNull();
+    // Esc goes up from the Lobby to the building, as from any other level.
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushSync();
+    expect(crumbs()).toBe('Building');
+  });
+
+  it('draws the Lobby in 3D in the stage once its detail is in, and the façade again on the way out', async () => {
+    location.hash = '#/lobby';
+    const lobby = { version: 9 as const, doorman: { name: 'Gordon', sessionId: null }, gate: null, queue: [], tasks: [{ id: 'G-1', title: 'G-1', tie: 0, org: null, body: null, where: 'refused' as const, reason: null, since: NOW, account: null, sessions: [], subagents: 0 }], seats: [], turnTo: null, power: null, cap: null, machine: null, limits: null, capacity: { plan: null, byCap: null, bySeats: 0, slotsFree: null, binds: null, nextReset: null }, seatLimitPct: 80, usage: null, updatedAt: NOW };
+    const scene = makeScene();
+    scene.lobby = { doorman: 'Gordon', refused: 1, ready: 0, seatsFull: 0, memory: null, held: false, paused: 0, queue: [], queueMore: 0, updatedAt: NOW };
+    const { target, renderer } = app(fakeStore({ scene }), { api: { fetchLobby: vi.fn(async () => ({ ok: true as const, lobby })) } });
+    await settle();
+    expect(target.querySelector('.stage .lobby-stage canvas')).not.toBeNull();
+    expect(target.querySelector('.stage svg.facade')).toBeNull();
+    expect(renderer.lobbies).toHaveLength(1);
+    expect(renderer.lobbies[0]!.calls).toEqual(['lobby 1 0 0']);
+    window.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' }));
+    flushSync();
+    expect(renderer.lobbies[0]!.calls.at(-1)).toBe('dispose');
+    expect(target.querySelector('.stage .lobby-stage')).toBeNull();
   });
 
   it('counts one session that needs you in the singular', () => {

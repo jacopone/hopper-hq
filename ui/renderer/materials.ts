@@ -4,7 +4,7 @@
  * state (screenColor): the floor gives them their colours again on a theme change.
  */
 import { Color, MeshBasicMaterial, MeshStandardMaterial, type Material } from 'three';
-import { FEATURE_SLOTS, REPO_SLOTS } from '../../src/scene/palette';
+import { FEATURE_SLOTS, ORGS, REPO_SLOTS, type Org } from '../../src/scene/palette';
 import type { ShownState } from '../../src/scene/types';
 import type { ColorToken, NumberToken, ThemeTokens } from './theme';
 
@@ -107,6 +107,7 @@ export class Materials {
   private readonly rugs: MeshStandardMaterial[] = [];
   private readonly ties: MeshStandardMaterial[] = [];
   private readonly noTie: MeshStandardMaterial;
+  private readonly orgs = new Map<Org, MeshStandardMaterial>();
   private readonly screens = new Map<ColorToken | null, Color>();
   private readonly mixer = new Color();
 
@@ -122,6 +123,7 @@ export class Materials {
     }
     for (let n = 0; n < FEATURE_SLOTS; n++) this.ties.push(this.make({ color: `feature-${n}` as ColorToken }));
     this.noTie = this.make({ color: 'feature-none' });
+    for (const o of ORGS) this.orgs.set(o, this.make({ color: `org-${o}` as ColorToken }));
     for (const token of new Set(Object.values(SCREEN_TOKEN))) this.screens.set(token, new Color());
     this.screen = new MeshBasicMaterial();
     this.ring = new MeshBasicMaterial({ transparent: true, opacity: 0.9, depthWrite: false });
@@ -145,6 +147,11 @@ export class Materials {
   /** A tie by feature slot; null (a department floor) gives the neutral tie. */
   tie(slot: number | null): MeshStandardMaterial {
     return slot === null ? this.noTie : this.ties[wrap(slot, FEATURE_SLOTS)]!;
+  }
+
+  /** A lanyard by organisation. */
+  org(o: Org): MeshStandardMaterial {
+    return this.orgs.get(o)!;
   }
 
   /**

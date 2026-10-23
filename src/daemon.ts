@@ -7,6 +7,7 @@ import { fileURLToPath } from 'node:url';
 import { accountLabels } from './adapters/claude-code/account.js';
 import { FsAdapter } from './adapters/claude-code/fs-adapter.js';
 import { DEFAULT_GORDON_DIR, GordonProvider } from './adapters/gatekeepers/gordon.js';
+import { UsageMeter } from './usage/meter.js';
 import { HerdrAdapter, probeHerdr } from './adapters/herdr.js';
 import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
@@ -237,6 +238,12 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
     lobby: (l) => collector.setLobby(l),
     task: (sessionId, task) => void collector.ingest({ type: 'task', sessionId, ts: Date.now(), source: 'gatekeeper', task }),
   });
+  // The Lobby prices the sessions' tokens from their transcripts: read-only, nothing is called.
+  const meter = gatekeeper ? new UsageMeter() : null;
+  if (meter) {
+    collector.setUsageSource(() => meter.read());
+    meter.start(() => collector.meteredSessions());
+  }
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
   if (floors !== 'feature') log(`hopper-hq gives each repository a floor (--floors ${floors})`);
@@ -255,6 +262,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
       fsAdapter?.stop();
       herdr?.stop();
       gatekeeper?.stop();
+      meter?.stop();
       demo?.stop();
       hub.close();
       server.closeAllConnections();

@@ -5,9 +5,11 @@
 import { WebGLRenderer } from 'three';
 import type { FloorDetail } from '../../src/scene/types';
 import type { ThemeTokens } from './theme';
+import { createLobbyView, type LobbyView } from './lobby-view';
 import { browserEnv, createFloorView } from './view';
 
 export type { ThemeTokens } from './theme';
+export type { LobbyView } from './lobby-view';
 export { readThemeTokens, COLOR_TOKENS, NUMBER_TOKENS } from './theme';
 
 export class WebGLUnavailableError extends Error {
@@ -41,21 +43,29 @@ export interface FloorView {
   dispose(): void;
 }
 
-/** Throws WebGLUnavailableError when a WebGL context cannot be created. */
-export function mountFloorView(host: { canvas: HTMLCanvasElement; labels: HTMLElement }, theme: ThemeTokens, opts?: ViewOptions): FloorView {
+/** A renderer on the canvas's WebGL 2 context; throws WebGLUnavailableError when there is none. */
+function rendererOn(canvas: HTMLCanvasElement): WebGLRenderer {
   let context: WebGL2RenderingContext | null = null;
   try {
-    context = host.canvas.getContext('webgl2', { alpha: true, antialias: true, depth: true, stencil: false, powerPreference: 'default' });
+    context = canvas.getContext('webgl2', { alpha: true, antialias: true, depth: true, stencil: false, powerPreference: 'default' });
   } catch {
     context = null;
   }
   // A canvas a disposed view has used hands back its lost context: it cannot draw again.
   if (!context || context.isContextLost()) throw new WebGLUnavailableError();
-  let renderer: WebGLRenderer;
   try {
-    renderer = new WebGLRenderer({ canvas: host.canvas, context, antialias: true, alpha: true });
+    return new WebGLRenderer({ canvas, context, antialias: true, alpha: true });
   } catch (err) {
     throw new WebGLUnavailableError(err instanceof Error ? err.message : String(err));
   }
-  return createFloorView(host, theme, renderer, browserEnv(), opts);
+}
+
+/** Throws WebGLUnavailableError when a WebGL context cannot be created. */
+export function mountFloorView(host: { canvas: HTMLCanvasElement; labels: HTMLElement }, theme: ThemeTokens, opts?: ViewOptions): FloorView {
+  return createFloorView(host, theme, rendererOn(host.canvas), browserEnv(), opts);
+}
+
+/** The Lobby in 3D on its own canvas. Throws WebGLUnavailableError when a WebGL context cannot be created. */
+export function mountLobbyView(host: { canvas: HTMLCanvasElement }, theme: ThemeTokens): LobbyView {
+  return createLobbyView(host, theme, rendererOn(host.canvas), browserEnv());
 }

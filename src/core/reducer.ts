@@ -251,8 +251,11 @@ export function applyEvent(prev: Session | undefined, e: CollectorEvent): Sessio
     case 'pane':
       // The terminal's word on where the session is: a pane from a session file, written at start, may be stale by now.
       return s.tmuxPane === e.pane ? s : { ...s, tmuxPane: e.pane, tmuxSession: null };
-    case 'task':
-      return s.task === e.task ? s : { ...s, task: e.task };
+    case 'task': {
+      // The name comes first: the registry's word for a reused pane would flap against it at every session.seen.
+      const task = (s.name ? taskIdOf(s.name) : null) ?? e.task;
+      return s.task === task ? s : { ...s, task };
+    }
     case 'title':
       return { ...s, title: e.title };
     case 'branch':

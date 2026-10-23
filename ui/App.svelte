@@ -17,6 +17,7 @@
   import FloorPanel from './components/FloorPanel.svelte';
   import FloorStage from './components/FloorStage.svelte';
 import LobbyPanel from './components/LobbyPanel.svelte';
+  import LobbyStage from './components/LobbyStage.svelte';
   import Notice from './components/Notice.svelte';
   import RunPanel from './components/RunPanel.svelte';
   import Toast from './components/Toast.svelte';
@@ -63,9 +64,11 @@ import LobbyPanel from './components/LobbyPanel.svelte';
   let lastFocus: { el: Element; group: Element | null; index: number } | null = null;
 
   $effect(() => store.watchFloor(route.floor));
-  // The Lobby is asked for while its route is open, now and every five seconds: it has no live stream yet.
+  // The Lobby is asked for while its route is open, now and every five seconds: it has no live stream yet. The route
+  // is read through a derived flag, so that a route given again while the Lobby is open does not empty it ('Loading').
+  const lobbyOpen = $derived(route.lobby);
   $effect(() => {
-    if (!route.lobby) return;
+    if (!lobbyOpen) return;
     lobbyDetail = undefined;
     let lastError: string | null = null;
     const ask = async () => {
@@ -187,11 +190,11 @@ import LobbyPanel from './components/LobbyPanel.svelte';
     (chips[Math.min(last.index, chips.length - 1)] ?? heading())?.focus();
   }
 
-  /** Esc goes up one level: desk or run, floor, building. */
+  /** Esc goes up one level: desk or run, floor or Lobby, building. */
   function onKeydown(e: KeyboardEvent): void {
     if (e.key !== 'Escape' || e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey || e.shiftKey) return;
     if (route.desk !== null || route.run !== null) navigate({ floor: route.floor, desk: null, run: null, lobby: false });
-    else if (route.floor !== null) navigate({ floor: null, desk: null, run: null, lobby: false });
+    else if (route.floor !== null || route.lobby) navigate({ floor: null, desk: null, run: null, lobby: false });
   }
 
   /** Leaving the page frees its connection at once. A page the browser brings back from its back-forward cache starts afresh. */
@@ -264,8 +267,10 @@ import LobbyPanel from './components/LobbyPanel.svelte';
       <AttentionBar attention={scene.attention} terminal={scene.terminal.kind} now={clock} onOpen={openEntry} onGo={(entry) => focus(entry.sessionId)} />
     {/if}
     <main class="main">
-      <section class="stage" aria-label={route.floor === null ? 'Building' : 'Floor'} bind:this={stage}>
-        {#if route.floor === null}
+      <section class="stage" aria-label={route.lobby ? 'Lobby' : route.floor === null ? 'Building' : 'Floor'} bind:this={stage}>
+        {#if route.lobby && lobbyDetail}
+          <LobbyStage lobby={lobbyDetail} theme={resolvedTheme(theme, systemDark)} load={renderer} />
+        {:else if route.floor === null}
           {#if scene}
             <Facade
               floors={scene.floors}

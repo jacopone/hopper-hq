@@ -55,6 +55,10 @@ export const COLOR_TOKENS = [
   'feature-6',
   'feature-7',
   'feature-none',
+  'org-amatino',
+  'org-tenuta',
+  'org-personal',
+  'org-other',
 ] as const;
 
 export const NUMBER_TOKENS = ['visor-int', 'window-int', 'lamp-int', 'screen-int', 'hemi-int', 'sun-int'] as const;
@@ -122,6 +126,10 @@ export const DAY_COLORS: Readonly<Record<ColorToken, string>> = {
   'feature-6': '#5e5410',
   'feature-7': '#7a1f1f',
   'feature-none': '#4a5163',
+  'org-amatino': '#1f4fd8',
+  'org-tenuta': '#f26b1d',
+  'org-personal': '#f4f1e8',
+  'org-other': '#2b303b',
 };
 
 export const DAY_NUMBERS: Readonly<Record<NumberToken, number>> = {

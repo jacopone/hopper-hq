@@ -10,6 +10,7 @@ const RENDERER_COLORS = [
   ...[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `repo-${n}`),
   ...[0, 1, 2, 3, 4, 5, 6, 7].map((n) => `feature-${n}`),
   'feature-none',
+  'org-amatino', 'org-tenuta', 'org-personal', 'org-other',
 ];
 const RENDERER_NUMBERS = ['visor-int', 'window-int', 'lamp-int', 'screen-int', 'hemi-int', 'sun-int'];
 /** Outline §2.11: what the CSS and the SVG use, plus the label halo and the placard colours. */
@@ -39,6 +40,7 @@ const PUBLISHED: Record<string, [string, string]> = {
   ...Object.fromEntries(SLOTS.map((c, n) => [`repo-${n}`, [c, c]])),
   ...Object.fromEntries(TIES.map((c, n) => [`feature-${n}`, [c, c]])),
   'feature-none': ['#4A5163', '#4A5163'],
+  'org-amatino': ['#1F4FD8', '#4D7BFF'], 'org-tenuta': ['#F26B1D', '#FF8A3D'], 'org-personal': ['#F4F1E8', '#F4F1E8'], 'org-other': ['#2B303B', '#8C94A6'],
   'visor-int': ['1', '1.8'], 'window-int': ['0.45', '0.9'], 'lamp-int': ['0.6', '2.4'], 'screen-int': ['0.9', '2'],
   'hemi-int': ['1.15', '0.6'], 'sun-int': ['1.7', '0.55'],
 };

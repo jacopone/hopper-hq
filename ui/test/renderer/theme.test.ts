@@ -22,8 +22,8 @@ const NIGHT: Record<string, string> = {
 
 describe('theme tokens', () => {
   it('lists the renderer tokens, the room tokens among them, without the leading dashes', () => {
-    expect(COLOR_TOKENS).toHaveLength(51);
-    expect(new Set(COLOR_TOKENS).size).toBe(51);
+    expect(COLOR_TOKENS).toHaveLength(55);
+    expect(new Set(COLOR_TOKENS).size).toBe(55);
     expect(COLOR_TOKENS).toEqual(expect.arrayContaining(['scene-floor', 'bot-visor', 'accent', 's-nosignal', 'repo-7', 'feature-7', 'feature-none']));
     expect(COLOR_TOKENS).toEqual(expect.arrayContaining(['scene-board', 'bot-hardhat', 'bot-jet']));
     expect([DAY_COLORS['scene-board'], DAY_COLORS['bot-hardhat'], DAY_COLORS['bot-jet']]).toEqual(['#fafafa', '#4a5163', '#6b7280']);

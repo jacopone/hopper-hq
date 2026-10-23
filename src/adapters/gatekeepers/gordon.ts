@@ -3,7 +3,7 @@ import { homedir } from 'node:os';
 import { join } from 'node:path';
 import { seatTurn } from '../../core/lobby.js';
 import type { Lobby } from '../../core/types.js';
-import { buildSeats, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskPanes, parseWatchdogTail, readPower, type LimitDoc } from './gordon-files.js';
+import { buildSeats, GORDON_LIMITS, parseLimitDoc, parseLimits, parseLobbyFile, parseSeatsLog, parseTaskInfo, parseTaskPanes, parseWatchdogTail, readCpu, readPower, withCpu, type LimitDoc } from './gordon-files.js';
 import type { GatekeeperProvider, GatekeeperSink } from './types.js';
 
 export interface GordonOptions {
@@ -13,6 +13,8 @@ export interface GordonOptions {
   limitsDir?: string;
   /** The sessions' cgroup (default: the user's claude.slice). */
   cgroupDir?: string;
+  /** Where the load and the cores' frequency are read (default /proc). */
+  procDir?: string;
   /** Each local session's pane, as the collector knows them, asked at every poll. */
   panes: () => ReadonlyMap<string, string>;
   now?: () => number;
@@ -58,8 +60,14 @@ type Accounts = Record<string, Account>;
 /** An accounts entry that is one: an object. A null or a string is skipped. */
 const account = (v: unknown): Account | null => (v && typeof v === 'object' && !Array.isArray(v) ? (v as Account) : null);
 
-/** The Lobby without its date: what a change is judged by, so that a date alone never counts as news. */
-const contentOf = ({ updatedAt: _at, ...rest }: Lobby): string => JSON.stringify(rest);
+/** The Lobby without its date and without the CPU's load and frequency: what a change is judged by, so that a date or the jitter of a reading never counts as news. The brake stays in. */
+const contentOf = ({ updatedAt: _at, machine, ...rest }: Lobby): string => JSON.stringify({ ...rest, machine: machine && { ...machine, load: null, cpuMhz: null } });
+
+/** The CPU's rounded load and frequency, which are handed on when they changed and the last Lobby is this old. */
+const cpuOf = (l: Lobby): string => `${l.machine?.load ?? ''}|${l.machine?.cpuMhz ?? ''}`;
+
+/** The load and the frequency of the CPU move at every reading: a Lobby that differs in nothing else is handed on once a minute at most. */
+const CPU_REFRESH_MS = 60_000;
 
 /**
  * Reads Gordon's files every few seconds into one Lobby, and hands it on when it differs from the last. Read-only: it
@@ -71,10 +79,14 @@ export class GordonProvider implements GatekeeperProvider {
   /** The poll under way, so that a poll asked for meanwhile waits for it instead of reading twice. */
   private inflight: Promise<void> | null = null;
   private last: string | null = null;
+  /** The CPU figures and the time of the last Lobby handed on. */
+  private lastCpu: string | null = null;
+  private lastAt = 0;
   /** The task each session was last given, so that only changes are told. */
   private readonly tasks = new Map<string, string>();
   private readonly limitsDir: string;
   private readonly cgroupDir: string;
+  private readonly procDir: string;
   private readonly now: () => number;
   private readonly log: (line: string) => void;
   private readonly logged = new Set<string>();
@@ -82,6 +94,7 @@ export class GordonProvider implements GatekeeperProvider {
   constructor(private readonly o: GordonOptions) {
     this.limitsDir = o.limitsDir ?? DEFAULT_LIMITS_DIR;
     this.cgroupDir = o.cgroupDir ?? DEFAULT_CGROUP_DIR;
+    this.procDir = o.procDir ?? '/proc';
     this.now = o.now ?? Date.now;
     this.log = o.log ?? ((line) => process.stderr.write(line + '\n'));
   }
@@ -108,8 +121,11 @@ export class GordonProvider implements GatekeeperProvider {
     try {
       const lobby = await this.read();
       const text = contentOf(lobby);
-      if (text !== this.last) {
+      const now = this.now();
+      if (text !== this.last || (cpuOf(lobby) !== this.lastCpu && now - this.lastAt >= CPU_REFRESH_MS)) {
         this.last = text;
+        this.lastCpu = cpuOf(lobby);
+        this.lastAt = now;
         this.sink?.lobby(lobby);
       }
     } catch (err) {
@@ -149,7 +165,7 @@ export class GordonProvider implements GatekeeperProvider {
       this.file('tasks.jsonl'),
     ]);
     const [lobbyText, limitsText, watchdogText, accountsText, seatsLogText, orderText, tasksText] = reads.map((r) => r.text) as [string, string, string, string, string, string, string];
-    const [docs, power] = await Promise.all([this.limitDocs(), readPower(this.cgroupDir)]);
+    const [docs, power, cpu] = await Promise.all([this.limitDocs(), readPower(this.cgroupDir), readCpu(this.procDir)]);
     const file = parseLobbyFile(lobbyText);
     const limits = parseLimits(limitsText);
     const watchdog = parseWatchdogTail(watchdogText);
@@ -169,7 +185,14 @@ export class GordonProvider implements GatekeeperProvider {
     const seats = buildSeats(docs, accounts, order, parseSeatsLog(seatsLogText), now);
     // A waiting launch names its profile; the accounts file maps a profile to its email.
     const emailOfProfile = new Map(Object.values(accounts).flatMap((a) => (a.profile && a.email ? [[a.profile, a.email] as const] : [])));
-    const queue = (file?.queue ?? []).map(({ profile, ...w }) => ({ ...w, account: profile ? (emailOfProfile.get(profile) ?? profile) : null }));
+    // lobby.json says a task's area and repository when it knows them; the registry, which the orchestrator writes it from, says them otherwise.
+    const info = parseTaskInfo(tasksText);
+    const queue = (file?.queue ?? []).map(({ profile, ...w }) => ({
+      ...w,
+      area: w.area ?? info.get(w.id)?.area ?? null,
+      repo: w.repo ?? info.get(w.id)?.repo ?? null,
+      account: profile ? (emailOfProfile.get(profile) ?? profile) : null,
+    }));
     this.announceTasks(parseTaskPanes(tasksText));
     // The watchdog writes the cap it holds into limits.json: that file is the word on the hold, the log only when it cannot be read.
     const held = limits.max !== null ? limits.max === 0 : watchdog.held;
@@ -183,6 +206,9 @@ export class GordonProvider implements GatekeeperProvider {
       turnTo: seatTurn(seats),
       power: power ? { ...power, held, pausedPanes: watchdog.pausedPanes } : null,
       cap: file || limits.max !== null ? { working: file?.working ?? null, max: limits.max } : null,
+      machine: withCpu(file?.machine ?? null, cpu, GORDON_LIMITS.brakeMhz),
+      limits: GORDON_LIMITS,
+      plan: file?.plan ?? null,
       updatedAt: file?.updatedAt ?? (newest.length ? Math.max(...newest) : now),
     };
   }
