@@ -1,13 +1,13 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import LobbyPanel from '../../components/LobbyPanel.svelte';
-import type { LobbyDetail, TaskCard } from '../../../src/scene/types';
+import { SCENE_VERSION, type LobbyDetail, type TaskCard } from '../../../src/scene/types';
 import { NOW } from '../helpers/fixtures';
 import { cleanup, click, render, text } from '../helpers/render';
 
 afterEach(cleanup);
 
 const detail: LobbyDetail = {
-  version: 9,
+  version: SCENE_VERSION,
   doorman: { name: 'Gordon', sessionId: 'G0' },
   gate: { go: false, text: 'ASPETTA: slice al 84%; ultimo avvio 40 s fa;', reasons: [{ kind: 'slice', text: 'slice al 84%' }, { kind: 'pacing', text: 'ultimo avvio 40 s fa' }], at: NOW - 12_000 },
   queue: [

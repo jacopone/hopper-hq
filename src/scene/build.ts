@@ -6,13 +6,14 @@ import { isPaneOf, type TerminalKind } from '../core/terminal.js';
 import type { Lobby, WorkflowRun } from '../core/types.js';
 import { liveRun } from '../core/reducer.js';
 import { buildFloors, byCodeUnit, floorKeyOf, islandKeyOf, repoLabels, repoRootOf, type Floor, type SessionView } from '../core/view.js';
-import { INTERNS_MAX, layoutPlan, LOUNGE_SEATS, MEETING_AGENTS_MAX, POD_DESKS, RUNS_SHOWN, UNSEATED_MAX } from './layout.js';
+import { AGENT_WINDOWS_MAX, INTERNS_MAX, layoutPlan, LOUNGE_SEATS, MEETING_AGENTS_MAX, POD_DESKS, RUNS_SHOWN, UNSEATED_MAX } from './layout.js';
 import { FEATURE_SLOTS, orgOfAccount, REPO_SLOTS, slotOf } from './palette.js';
 import { CREW_PREFIX, roomRunsOf, seatFloor, type RoomRun, type Seating } from './seating.js';
 import { buildLobbySummary } from './lobby.js';
 import { capKey, cleanOrNull, cleanText, KEY_MAX, taskTitle } from './text.js';
 import {
   SCENE_VERSION,
+  type AgentWindow,
   type AttentionEntry,
   type Badge,
   type BuildingScene,
@@ -145,6 +146,11 @@ function countsOf(r: WorkflowRun): { running: number; finished: number } {
   return { running: r.agents.filter((a) => a.running).length, finished: r.agentsFinished };
 }
 
+/** The session's running subagents and workflow agents: what its desk counts, and the windows it lights on the façade. */
+function agentsRunningOf(v: SessionView): number {
+  return v.children.filter((c) => c.running).length + v.runs.reduce((n, r) => n + countsOf(r).running, 0);
+}
+
 /**
  * The session's runs for its panel: the live ones by start, then the others, the latest to end first (a run that never
  * ended counts from its start); at most RUNS_SHOWN. A run keeps its own status.
@@ -214,7 +220,8 @@ function robotOf(state: ShownState, root: string, feature: string | null, task: 
 /**
  * A floor as the façade and the directory show it: one window per desk of its plan, in desk index order, carrying the
  * state of whoever sits there (dark for a free desk), and the count of its sessions by state, those without a desk too.
- * A session listed at two desks sits at its first only, as on the floor.
+ * A session listed at two desks sits at its first only, as on the floor. Past the desks, a lit window for each running
+ * subagent and workflow agent, the floor's sessions in its order, at most AGENT_WINDOWS_MAX, and the count of them all.
  */
 function summaryOf(floor: Floor, number: number, seating: Seating): FloorSummary {
   const on = new Map(floor.sessions.map((v) => [v.id, v]));
@@ -225,6 +232,7 @@ function summaryOf(floor: Floor, number: number, seating: Seating): FloorSummary
     lit.add(v.id);
     return { sessionId: idOf(v), state: v.effectiveState as ShownState, task: cleanOrNull(v.task, 64) };
   });
+  const agentWindows = floor.sessions.flatMap((v) => Array.from({ length: agentsRunningOf(v) }, (): AgentWindow => ({ sessionId: idOf(v) })));
   const counts: Partial<Record<ShownState, number>> = {};
   for (const state of SHOWN_STATES) {
     const n = floor.sessions.filter((v) => v.effectiveState === state).length;
@@ -239,6 +247,8 @@ function summaryOf(floor: Floor, number: number, seating: Seating): FloorSummary
     accounts: [...new Set(floor.sessions.flatMap((v) => (v.account ? [cleanText(v.account)] : [])))].sort(byCodeUnit),
     windows,
     counts,
+    agents: agentWindows.length,
+    agentWindows: agentWindows.slice(0, AGENT_WINDOWS_MAX),
     shutters: floor.dormant,
     openedAt: floor.openedAt,
   };
@@ -264,7 +274,7 @@ function occupantOf(v: SessionView, label: (v: SessionView) => string, terminal:
     since: v.effectiveSince,
     reason: reasonOf(v),
     activity: activityOf(v),
-    agentsRunning: v.children.filter((c) => c.running).length + v.runs.reduce((n, r) => n + countsOf(r).running, 0),
+    agentsRunning: agentsRunningOf(v),
     summary: deskSummaryOf(v),
     ...internsOf(v, crewSeated),
     runs: runsOf(v),
@@ -368,7 +378,7 @@ function detailOf(floor: Floor, number: number, label: (v: SessionView) => strin
     .map(({ r, slot }) => roomOf(r, slot, plan.rooms[slot]!));
   const liveRuns = floor.sessions.reduce((n, v) => n + v.runs.filter(liveRun).length + (v.children.some((c) => c.running) ? 1 : 0), 0);
 
-  const { windows: _windows, ...summary } = summaryOf(floor, number, seating);
+  const { windows: _windows, agentWindows: _agentWindows, ...summary } = summaryOf(floor, number, seating);
   return {
     version: SCENE_VERSION,
     terminal,

@@ -61,10 +61,15 @@ export function floorWhat(f: Pick<FloorSummary, 'kind' | 'repos'>, names = 2): s
   return `${f.repos.slice(0, names).join(', ')} +${f.repos.length - names}`;
 }
 
-/** What a floor is ('orders-api, payments-svc +1 · 4 sessions', 'Department · 5 sessions') and the counts worth a glance. */
-export function floorMeta(f: FloorSummary): Meta[] {
+/** How many sessions a floor has, and how many agents they run when any: '4 sessions', '4 sessions · 6 agents'. */
+export function headcount(f: Pick<FloorSummary, 'counts' | 'agents'>): string {
   const sessions = plural(sessionsOf(f), 'session', 'sessions');
-  const metas: Meta[] = [{ text: `${floorWhat(f)} · ${sessions}`, tone: null }];
+  return f.agents > 0 ? `${sessions} · ${plural(f.agents, 'agent', 'agents')}` : sessions;
+}
+
+/** What a floor is ('orders-api, payments-svc +1 · 4 sessions', 'Department · 5 sessions · 2 agents') and the counts worth a glance. */
+export function floorMeta(f: FloorSummary): Meta[] {
+  const metas: Meta[] = [{ text: `${floorWhat(f)} · ${headcount(f)}`, tone: null }];
   if (f.shutters) metas.push({ text: 'shutters down', tone: null });
   const { needs_you: needs, done, in_meeting: meeting, no_signal: quiet } = f.counts;
   if (needs) metas.push({ text: `● ${needs} ${needYou(needs)}`, tone: 'needs' });
@@ -74,9 +79,10 @@ export function floorMeta(f: FloorSummary): Meta[] {
   return metas;
 }
 
-/** A floor for a screen reader, with its repositories and every count its label shows: 'Floor 4, checkout-v2 (orders-api, web): 4 sessions, 1 needs you, 1 done'. */
+/** A floor for a screen reader, with its repositories and every count its label shows: 'Floor 4, checkout-v2 (orders-api, web): 4 sessions, 2 agents, 1 needs you, 1 done'. */
 export function floorLabel(f: FloorSummary): string {
   const parts = [plural(sessionsOf(f), 'session', 'sessions')];
+  if (f.agents > 0) parts.push(plural(f.agents, 'agent', 'agents'));
   const { needs_you: needs, done, in_meeting: meeting, no_signal: quiet } = f.counts;
   if (needs) parts.push(`${needs} ${needYou(needs)}`);
   if (done) parts.push(`${done} done`);

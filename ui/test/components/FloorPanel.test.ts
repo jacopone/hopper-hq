@@ -32,15 +32,15 @@ const MIN = 60_000;
 const sessionOf = (floor: FloorDetail, id: string): Occupant => occupantsOf(floor).find((o) => o.sessionId === id)!;
 
 describe('FloorPanel', () => {
-  it('heads the panel with the floor number, kind and size', () => {
+  it('heads the panel with the floor number, kind and size, its running agents counted', () => {
     const feature = panel(CHECKOUT).target;
     expect(text(feature.querySelector('.eyebrow'))).toBe('Floor 4 · Feature');
     expect(text(feature.querySelector('.p-title'))).toBe('checkout-v2');
-    expect(text(feature.querySelector('.p-sub'))).toBe('3 repos on this feature · 4 sessions');
+    expect(text(feature.querySelector('.p-sub'))).toBe('3 repos on this feature · 4 sessions · 5 agents');
     cleanup();
     const department = panel(ORDERS).target;
     expect(text(department.querySelector('.eyebrow'))).toBe('Floor 2 · Department');
-    expect(text(department.querySelector('.p-sub'))).toBe('Sessions with no feature branch · 5 sessions');
+    expect(text(department.querySelector('.p-sub'))).toBe('Sessions with no feature branch · 5 sessions · 1 agent');
   });
 
   it('gives each checkout its group, ordered by repo, branch and path: repo colour, repo, branch, worktree and path', () => {
@@ -97,7 +97,7 @@ describe('FloorPanel', () => {
       'storefront-web-b2 | Done, to review | Rewrite checkout copy and empty states',
       'storefront-web-w9 | Working · no desk | Wait for a desk',
     ]);
-    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 5 sessions');
+    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 5 sessions · 5 agents');
     expect(target.querySelector('.gone')).toBeNull();
     click(groups()[2]!.querySelectorAll('.row-btn')[2]);
     expect(onDesk).toHaveBeenCalledWith('sw-w9');
@@ -109,7 +109,7 @@ describe('FloorPanel', () => {
     floor.unseatedMore = 3;
     const { target, groups } = panel(CHECKOUT, floor, 'sw-w8');
     expect(groups()).toHaveLength(3);
-    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 8 sessions');
+    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 8 sessions · 5 agents');
     expect(text(target.querySelector('.unseated-more'))).toBe('+3 more without a desk');
     expect(target.querySelector('.gone')).toBeNull();
     cleanup();
@@ -138,7 +138,7 @@ describe('FloorPanel', () => {
   it('shows the floor loading, from its summary', () => {
     const target = render(FloorPanel, { summary: summaryOf(CHECKOUT), floor: undefined, selected: null, now: NOW, onDesk: vi.fn(), onBack: vi.fn(), onRun: vi.fn() });
     expect(text(target.querySelector('.p-title'))).toBe('checkout-v2');
-    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 4 sessions');
+    expect(text(target.querySelector('.p-sub'))).toBe('3 repos on this feature · 4 sessions · 5 agents');
     expect(text(target.querySelector('.p-note'))).toBe('Loading the floor…');
     expect(target.querySelectorAll('section.checkout')).toHaveLength(0);
   });

@@ -3,7 +3,7 @@
  * (the plan from src/scene/layout.ts, colour slots from src/scene/palette.ts). Each checkout sits in pods of its own
  * (helpers/plan.ts). Each call returns fresh objects, so a test may change what it gets.
  */
-import { LOUNGE_SEATS, type PlanLayout } from '../../../src/scene/layout';
+import { AGENT_WINDOWS_MAX, LOUNGE_SEATS, type PlanLayout } from '../../../src/scene/layout';
 import { FEATURE_SLOTS, REPO_SLOTS, orgOfAccount, slotOf } from '../../../src/scene/palette';
 import {
   SCENE_VERSION,
@@ -301,6 +301,8 @@ function summary(f: FloorSpec, number: number): FloorSummary {
     accounts: [...new Set(f.checkouts.flatMap((c) => c.desks.flatMap((d) => (d.account ? [d.account] : []))))].sort(),
     windows: podsOf(f).pods.flatMap((p) => p.desks.map((d) => (d.occupant ? { sessionId: d.occupant.sessionId, state: d.occupant.state, task: d.occupant.task } : { sessionId: null, state: null, task: null }))),
     counts,
+    agents: desks.reduce((n, d) => n + (d.agents ?? 0), 0),
+    agentWindows: desks.flatMap((d) => Array.from({ length: d.agents ?? 0 }, () => ({ sessionId: d.id }))).slice(0, AGENT_WINDOWS_MAX),
     shutters: desks.every((d) => d.state === 'dormant'),
     openedAt: f.openedAt,
   };
@@ -332,7 +334,7 @@ export function makeFloor(key: string): FloorDetail | null {
   const f = FLOORS[index];
   if (!f) return null;
   const { plan, pods } = podsOf(f);
-  const { windows: _windows, ...rest } = summary(f, FLOORS.length - index);
+  const { windows: _windows, agentWindows: _agentWindows, ...rest } = summary(f, FLOORS.length - index);
   return {
     terminal: 'tmux',
     version: SCENE_VERSION,

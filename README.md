@@ -134,6 +134,8 @@ The façade has one floor per feature, shared by every repository working on tha
 | Unlit (grey by day, dark at night) | Idle, or dormant (idle for days). A floor where everyone is dormant lowers its shutters. |
 | Unlit, with a frame | A free desk. |
 
+Past the desks, each subagent and workflow agent at work lights a purple window of its session's floor, six at most, with a `+N` for the rest; the floor's label counts them: `4 sessions · 6 agents`. Click one to open its session's desk. An agent is at work while its workflow's journal says so, or while its transcript was written in the last 90 seconds.
+
 The bar at the top lists who needs you (longest wait first) and what is done (oldest first) at every level. Click an entry to open its desk; `Go` switches tmux to its pane.
 
 Click a floor to go inside. Each session has a desk and a robot, whose pose and badge show its state. Click a desk or its robot to see what it is doing. Double-click it, press Enter, or use `Go to pane` to switch tmux to its pane.

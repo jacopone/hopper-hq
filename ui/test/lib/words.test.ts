@@ -31,15 +31,15 @@ describe('words', () => {
   it('describes each floor, with the counts that matter', () => {
     const [checkout, search, orders, docs] = makeScene().floors;
     const metas = (f: typeof checkout) => floorMeta(f!).map((m) => (m.tone ? `${m.tone}:${m.text}` : m.text));
-    expect(metas(checkout)).toEqual(['orders-api, payments-svc +1 · 4 sessions', 'needs:● 1 needs you', 'done:● 1 done', 'meeting:● 1 in a meeting']);
+    expect(metas(checkout)).toEqual(['orders-api, payments-svc +1 · 4 sessions · 5 agents', 'needs:● 1 needs you', 'done:● 1 done', 'meeting:● 1 in a meeting']);
     expect(metas(search)).toEqual(['search-svc, storefront-web · 2 sessions', 'nosignal:● 1 no signal']);
-    expect(metas(orders)).toEqual(['Department · 5 sessions', 'needs:● 1 needs you', 'done:● 1 done']);
+    expect(metas(orders)).toEqual(['Department · 5 sessions · 1 agent', 'needs:● 1 needs you', 'done:● 1 done']);
     expect(metas(docs)).toEqual(['docs-site, storefront-web · 2 sessions', 'shutters down']);
     // A screen reader hears every count the label shows.
-    expect(floorLabel(checkout!)).toBe('Floor 4, checkout-v2 (orders-api, payments-svc, storefront-web): 4 sessions, 1 needs you, 1 done, 1 in a meeting');
+    expect(floorLabel(checkout!)).toBe('Floor 4, checkout-v2 (orders-api, payments-svc, storefront-web): 4 sessions, 5 agents, 1 needs you, 1 done, 1 in a meeting');
     expect(floorLabel(search!)).toBe('Floor 3, search-ranking (search-svc, storefront-web): 2 sessions, 1 no signal');
     expect(floorLabel(docs!)).toBe('Floor 1, docs-refresh (docs-site, storefront-web): 2 sessions, shutters down');
-    expect(floorLabel({ ...orders!, counts: { needs_you: 2 } })).toBe('Floor 2, orders-api: 2 sessions, 2 need you');
+    expect(floorLabel({ ...orders!, counts: { needs_you: 2 } })).toBe('Floor 2, orders-api: 2 sessions, 1 agent, 2 need you');
     expect(floorMeta({ ...orders!, counts: { needs_you: 2 } })[1]!.text).toBe('● 2 need you');
   });
 
@@ -61,7 +61,7 @@ describe('words', () => {
     expect(sessionsOf(checkout!)).toBe(4);
     // Two sessions wait for a desk: no window is theirs, and the floor counts them.
     const crowded = { ...checkout!, counts: { ...checkout!.counts, working: 3 } };
-    expect([sessionsOf(crowded), floorMeta(crowded)[0]!.text]).toEqual([6, 'orders-api, payments-svc +1 · 6 sessions']);
+    expect([sessionsOf(crowded), floorMeta(crowded)[0]!.text]).toEqual([6, 'orders-api, payments-svc +1 · 6 sessions · 5 agents']);
     expect(sessionsOf({ counts: {} })).toBe(0);
   });
 

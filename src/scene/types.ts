@@ -6,7 +6,7 @@
 import type { Org } from './palette.js';
 import type { Capacity, GateVerdict, Lobby, Machine, MachineLimits, Power, RunStatus, Seat, SessionState, TerminalKind, Tokens, WaitKind, Waiting, WaitingKind } from '../core/types.js';
 
-export const SCENE_VERSION = 9;
+export const SCENE_VERSION = 10;
 
 /** States a desk can show. Ended sessions have left the building. */
 export type ShownState = Exclude<SessionState, 'ended'>;
@@ -27,6 +27,12 @@ export interface FacadeWindow {
   task: string | null;
 }
 
+/** A running subagent or workflow agent: a lit window of its session's floor, past the desks' windows. */
+export interface AgentWindow {
+  /** The session that started it. */
+  sessionId: string;
+}
+
 export interface FloorSummary {
   /** Stable id: 'feature:<key>' or 'repo:<repo root, or cwd outside git>'. */
   key: string;
@@ -42,6 +48,10 @@ export interface FloorSummary {
   /** One per desk of the plan, in desk index order. A floor's sessions are counted by `counts`, which include unseated ones. */
   windows: FacadeWindow[];
   counts: Partial<Record<ShownState, number>>;
+  /** The running subagents and workflow agents of the floor's sessions. */
+  agents: number;
+  /** One per running agent, its sessions in the floor's order, at most AGENT_WINDOWS_MAX: `agents` counts the rest. */
+  agentWindows: AgentWindow[];
   /** Every desk is dormant: the shutters are down. */
   shutters: boolean;
   /** When this floor key was first seen (persisted). Floors are ordered by it, newest on top. */
@@ -452,7 +462,7 @@ export interface Lounge {
   seats: number;
 }
 
-export interface FloorDetail extends Omit<FloorSummary, 'windows'> {
+export interface FloorDetail extends Omit<FloorSummary, 'windows' | 'agentWindows'> {
   version: typeof SCENE_VERSION;
   /** The terminal Go switches: it names the panes. */
   terminal: TerminalKind;

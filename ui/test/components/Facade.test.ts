@@ -176,9 +176,9 @@ describe('Facade', () => {
     const { target } = facade();
     expect([...target.querySelectorAll('g.floor')].map((g) => g.getAttribute('aria-label'))).toEqual([
       'Floor 1, docs-refresh (docs-site, storefront-web): 2 sessions, shutters down',
-      'Floor 2, orders-api: 5 sessions, 1 needs you, 1 done',
+      'Floor 2, orders-api: 5 sessions, 1 agent, 1 needs you, 1 done',
       'Floor 3, search-ranking (search-svc, storefront-web): 2 sessions, 1 no signal',
-      'Floor 4, checkout-v2 (orders-api, payments-svc, storefront-web): 4 sessions, 1 needs you, 1 done, 1 in a meeting',
+      'Floor 4, checkout-v2 (orders-api, payments-svc, storefront-web): 4 sessions, 5 agents, 1 needs you, 1 done, 1 in a meeting',
     ]);
     for (const g of target.querySelectorAll('g.floor')) {
       expect(g.getAttribute('role')).toBe('button');
@@ -188,8 +188,8 @@ describe('Facade', () => {
 
   it('colours each window by the state at its desk, leaves a free desk\'s window dark, and lowers the shutters on a dormant floor', () => {
     const { target, floor } = facade();
-    const win = (id: string) => target.querySelector(`polygon[data-desk="${id}"]`)!;
-    expect(target.querySelectorAll('polygon[data-desk]')).toHaveLength(13);
+    const win = (id: string) => target.querySelector(`polygon[data-desk="${id}"]:not(.st-agent)`)!;
+    expect(target.querySelectorAll('polygon[data-desk]:not(.st-agent)')).toHaveLength(13);
     // 16 desks on the checkout floor, 8 on each other floor; 13 sessions sit at them.
     const free = [...target.querySelectorAll('polygon.st-free')];
     expect(free).toHaveLength(16 + 3 * 8 - 13);
@@ -205,14 +205,41 @@ describe('Facade', () => {
     expect(floor(1).classList.contains('shut')).toBe(false);
   });
 
-  it("frames a free desk's window, and draws nothing past a floor's plan but its wall", () => {
+  it("frames a free desk's window, and draws nothing past a floor's plan and its agents but its wall", () => {
     const { floor } = facade();
-    // The orders floor has 8 desks on a building 16 windows wide: 8 windows and its side strip, no more.
-    expect(floor(1).querySelectorAll('polygon.sfill')).toHaveLength(8 + 1);
+    // The orders floor has 8 desks and 1 running agent on a building 21 windows wide: 9 windows and its side strip, no more.
+    expect(floor(1).querySelectorAll('polygon.sfill')).toHaveLength(8 + 1 + 1);
     expect(floor(1).querySelectorAll('polygon.st-empty')).toHaveLength(1);
     expect(floor(1).querySelectorAll('polygon.st-free')).toHaveLength(3);
     const free = source.slice(source.indexOf('\n  .sfill.st-free {'), source.indexOf('}', source.indexOf('\n  .sfill.st-free {')));
     expect(free).toMatch(/stroke: var\(--win-frame\);/);
+  });
+
+  it("lights a window past the desks for each running agent, in the meeting rooms' colour, that leads to its session's desk", () => {
+    const { target, floor, onDesk } = facade();
+    const agents = [...floor(3).querySelectorAll('polygon.st-agent')];
+    expect(agents).toHaveLength(5);
+    expect(agents.every((a) => a.classList.contains('lit') && text(a.querySelector('title')) === 'Agent at work')).toBe(true);
+    // The checkout floor's agents run under ps-d4 (3) and sw-a1 (2); the orders floor's one under its session.
+    expect(agents.map((a) => a.getAttribute('data-desk'))).toEqual(['ps-d4', 'ps-d4', 'ps-d4', 'sw-a1', 'sw-a1']);
+    expect(floor(1).querySelectorAll('polygon.st-agent')).toHaveLength(1);
+    expect(floor(0).querySelectorAll('polygon.st-agent')).toHaveLength(0);
+    expect(target.querySelector('.agents-more')).toBeNull();
+    agents[0]!.dispatchEvent(new MouseEvent('click', { bubbles: true }));
+    expect(onDesk).toHaveBeenCalledWith(CHECKOUT, 'ps-d4');
+    // The same colour as a meeting: an agent at work is in a meeting room inside.
+    expect(source).toMatch(/\.sfill\.st-in_meeting, \.sfill\.st-agent \{ fill: var\(--s-meeting\)/);
+  });
+
+  it('lights at most six agent windows a floor and writes the rest after them', () => {
+    const floors = makeScene().floors;
+    floors[0] = { ...floors[0]!, agents: 9, agentWindows: Array.from({ length: 6 }, () => ({ sessionId: 'ps-d4' })) };
+    const { floor } = facade(floors);
+    expect(floor(3).querySelectorAll('polygon.st-agent')).toHaveLength(6);
+    const more = floor(3).querySelector('.agents-more')!;
+    expect(text(more).replace(text(more.querySelector('title')), '')).toBe('+3');
+    expect(text(more.querySelector('title'))).toBe('3 more agents at work');
+    expect(floor(3).getAttribute('aria-label')).toContain('4 sessions, 9 agents');
   });
 
   it('labels each floor with its number, name and counts', () => {
@@ -222,7 +249,7 @@ describe('Facade', () => {
     expect(text(top.querySelector('.t-name'))).toBe('checkout-v2');
     const tone = (t: Element) => [...t.classList].find((c) => c.startsWith('c-')) ?? '';
     expect([...top.querySelectorAll('.t-meta tspan')].map((t) => `${tone(t)}|${t.textContent}`)).toEqual([
-      '|orders-api, payments-svc +1 · 4 sessions',
+      '|orders-api, payments-svc +1 · 4 sessions · 5 agents',
       'c-needs|● 1 needs you',
       'c-done|● 1 done',
       'c-meeting|● 1 in a meeting',

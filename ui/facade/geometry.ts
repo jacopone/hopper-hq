@@ -2,7 +2,8 @@
  * The building's façade as isometric SVG geometry: plain data, no DOM. Facade.svelte draws it.
  * Cells: x runs along the front (one window per desk), y is the depth, z is height in pixels.
  * Floors stack bottom-up on a lobby: floor number 1 sits on the lobby, and the scene lists floors top to bottom. Every
- * floor is as wide as the building; past the windows of its plan, it is plain wall, so that a floor shows its size.
+ * floor is as wide as the building; past the windows of its plan come the lit windows of its running agents, and past
+ * those, plain wall, so that a floor shows its size.
  * Same projection and proportions as prototypes/building-mockup.html.
  */
 import type { FloorSummary, ShownState } from '../../src/scene/types';
@@ -83,13 +84,23 @@ export interface WindowShape {
   lit: boolean;
 }
 
+/** A running subagent or workflow agent's window: lit in the meeting rooms' colour, it leads to its session's desk. */
+export interface AgentWindowShape {
+  sessionId: string;
+  points: string;
+}
+
 export interface FacadeFloor {
   key: string;
   number: number;
   plate: Box;
   wall: Box;
-  /** One per desk of the floor's plan, in desk index order, left to right. Past them, the floor is plain wall. */
+  /** One per desk of the floor's plan, in desk index order, left to right. */
   windows: WindowShape[];
+  /** Past the desks' windows, one per agent window of the floor. Past them, the floor is plain wall. */
+  agents: AgentWindowShape[];
+  /** The agents beyond `agents`, written in the cell after them: '+3'. Null when there are none. */
+  agentsMore: { count: number; at: Point } | null;
   side: string;
   shutters: boolean;
   /** Slats across every window of the floor's plan when the shutters are down. */
@@ -139,6 +150,11 @@ export interface FacadeModel {
   gate: GateModel | null;
 }
 
+/** The cells a floor's agents take past its desks: one window each, and one for the count of those beyond. */
+function agentCells(f: FloorSummary): number {
+  return f.agentWindows.length + (f.agents > f.agentWindows.length ? 1 : 0);
+}
+
 const LIT: ReadonlySet<ShownState> = new Set(['working', 'needs_you', 'done', 'in_meeting', 'no_signal']);
 
 /** Grows a bounding box over everything drawn, so the viewBox frames the whole model. */
@@ -176,7 +192,7 @@ function labelAt(b: Bounds, anchor: Point, labelX: number, hasMeta: boolean): La
 /** `lobbyMeta`: the Lobby's label carries a meta line (a gatekeeper's counts), so its name moves up as a floor's does. */
 export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, withGate = false): FacadeModel {
   const b = new Bounds();
-  const W = Math.max(MIN_WIDTH, ...floors.map((f) => f.windows.length));
+  const W = Math.max(MIN_WIDTH, ...floors.map((f) => f.windows.length + agentCells(f)));
   const D = DEPTH;
   const labelX = (W * TW) / 2 + 40;
 
@@ -217,12 +233,18 @@ export function facadeOf(floors: readonly FloorSummary[], lobbyMeta = false, wit
         }
       }
     }
+    const first = f.windows.length;
+    const agents = f.agentWindows.map((a, k): AgentWindowShape => ({ sessionId: a.sessionId, points: points(onFront(D, first + k + 0.18, first + k + 0.82, z0 + 13, z0 + FLOOR_H - 6)) }));
+    const more = f.agents - f.agentWindows.length;
+    const [mx, my] = project(first + f.agentWindows.length + 0.5, D, z0 + (FLOOR_H + 7) / 2);
     stacked.push({
       key: f.key,
       number: f.number,
       plate: b.box(-0.08, -0.08, W + 0.08, D + 0.08, z0, z0 + 4),
       wall: b.box(0, 0, W, D, z0 + 4, z0 + FLOOR_H),
       windows,
+      agents,
+      agentsMore: more > 0 ? { count: more, at: [r1(mx), r1(my)] } : null,
       side: points(onSide(W, 0.35, D - 0.35, z0 + 13, z0 + FLOOR_H - 6)),
       shutters: f.shutters,
       slats,

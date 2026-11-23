@@ -65,7 +65,7 @@
     <p class="eyebrow">Floor {head.number} · {head.kind === 'department' ? 'Department' : 'Feature'}</p>
     <h2 tabindex="-1" class="p-title">{head.name}</h2>
     <p class="p-sub">
-      {head.kind === 'department' ? 'Sessions with no feature branch' : `${plural(head.repos.length, 'repo', 'repos')} on this feature`} · {plural(sessions, 'session', 'sessions')}
+      {head.kind === 'department' ? 'Sessions with no feature branch' : `${plural(head.repos.length, 'repo', 'repos')} on this feature`} · {plural(sessions, 'session', 'sessions')}{head.agents > 0 ? ` · ${plural(head.agents, 'agent', 'agents')}` : ''}
     </p>
   {:else}
     <p class="eyebrow">Floor</p>
