@@ -10,7 +10,7 @@
 import { CanvasTexture, DirectionalLight, Group, HemisphereLight, Mesh, MeshBasicMaterial, MeshStandardMaterial, Scene, SRGBColorSpace, type Material } from 'three';
 import { LIFT, lobbyPlan, type Couch, type Elevator, type Figure, type LobbyInput, type LobbyPlan } from './lobby-layout';
 import { Materials } from './materials';
-import { Geometries, part } from './props';
+import { Geometries, nameplateText, part } from './props';
 import { buildRobot, poseRobot, type RobotObject } from './robot';
 import type { ThemeTokens } from './theme';
 import { COUCH, COUCH_ARM, COUCH_BACK, floorCenter, shadowExtent, WALL_H, WALL_T } from './world';
@@ -22,10 +22,19 @@ export const FRAME_OVER = 0.16;
 export const FRAME_W = 2 * LIFT.door + 2 * FRAME_OVER;
 /** The week's gauge: its centre this far east of the frame's edge, this tall and wide, from this high. */
 export const GAUGE = { off: 0.2, h: 1.9, w: 0.26, y: 0.15 } as const;
-/** The lamp over the doors, and the sign over it. */
+/** The lamp over the doors, and the sign over it: two lines, as wide as the gap to the next elevator allows. */
 export const LAMP = { y: DOOR_H + FRAME_OVER + 0.16, w: 0.7, h: 0.16 } as const;
-export const SIGN = { y: LAMP.y + 0.36, w: LIFT.w + 0.3, h: 0.42 } as const;
-const SIGN_PX = { w: 512, h: 96, font: 52 } as const;
+const SIGN_H = 0.7;
+export const SIGN = { y: LAMP.y + LAMP.h / 2 + 0.06 + SIGN_H / 2, w: LIFT.w + 0.4, h: SIGN_H } as const;
+/**
+ * A sign's canvas is this many pixels wide, and as tall for its width as the sign; the text keeps PAD of its height
+ * clear around it and a line's height is LEADING times its font.
+ */
+const SIGN_PX = { w: 512, pad: 0.08, leading: 1.15 } as const;
+/** The second line of a sign is drawn this much smaller than the first. */
+const SUB_LINE = 0.8;
+/** The most of a seat's name an elevator's sign shows, in graphemes: a longer one is cut short with an ellipsis. */
+export const SIGN_CHARS = 10;
 
 export type LampState = 'free' | 'full' | 'stale';
 
@@ -34,9 +43,9 @@ export function lampOf(e: Pick<Elevator, 'full' | 'stale'>): LampState {
   return e.stale ? 'stale' : e.full ? 'full' : 'free';
 }
 
-/** The sign over an elevator: its seat's name and the week used, or no reading. */
-export function signText(e: Pick<Elevator, 'name' | 'weekPct' | 'current'>): string {
-  return `${e.current ? '▸ ' : ''}${e.name} · ${e.weekPct === null ? 'n/d' : `7d ${Math.round(e.weekPct)}%`}`;
+/** The sign over an elevator: its seat's name, the seat in use marked, over the week used or no reading. */
+export function signLines(e: Pick<Elevator, 'name' | 'weekPct' | 'current'>): [string, string] {
+  return [`${e.current ? '▸ ' : ''}${nameplateText(e.name, SIGN_CHARS)}`, e.weekPct === null ? 'n/d' : `7d ${Math.round(e.weekPct)}%`];
 }
 
 /** What the scene is built from: when it is the same, nothing is rebuilt. */
@@ -53,6 +62,8 @@ export class LobbyScene {
   /** Everything the plan builds; emptied at each rebuild. */
   readonly content = new Group();
   plan: LobbyPlan | null = null;
+  /** The filtering of the signs' textures seen at a slant: the view sets the renderer's most before the first build. */
+  anisotropy = 1;
   private signature = '';
   private theme: ThemeTokens;
   /** Materials and textures of this scene's own, beyond the shared ones: lamps, gauges, the cap, the signs. */
@@ -171,7 +182,7 @@ export class LobbyScene {
     }
     // The seat the team uses now has a mat in front of its doors.
     if (e.current) part(root, g.box(FRAME_W, 0.02, 1.1), s.loungeRug, e.x, 0.014, 0.75, { cast: false });
-    this.sign(signText(e), e.x, SIGN.y, 0.07, SIGN.w, SIGN.h);
+    this.sign(signLines(e), e.x, SIGN.y, 0.07, SIGN.w, SIGN.h);
   }
 
   private counter(p: LobbyPlan): void {
@@ -187,7 +198,7 @@ export class LobbyScene {
     poseRobot(doorman, { pose: 'holding', badge: null }, p.doorman);
     this.content.add(doorman.group);
     this.robots.push(doorman);
-    this.sign('Gordon', c.x, c.h + 0.32, c.z + c.d / 2 + 0.06, 1.4, 0.26);
+    this.sign(['Gordon'], c.x, c.h + 0.32, c.z + c.d / 2 + 0.06, 1.4, 0.26);
   }
 
   private couch(c: Couch): void {
@@ -214,36 +225,66 @@ export class LobbyScene {
   /** A count on a stand, upright, facing the door. */
   private chip(text: string, x: number, z: number): void {
     part(this.content, this.geo.rod(0.03, 0.03, 0.9), this.mats.surface.leg, x, 0.45, z);
-    this.sign(text, x, 1.05, z + 0.04, 1.3, 0.36);
+    this.sign([text], x, 1.05, z + 0.04, 1.3, 0.36);
   }
 
-  /** A sign of text drawn on a canvas, upright, facing south. Without a 2D canvas (tests) it is a blank plate. */
-  private sign(text: string, x: number, y: number, z: number, w: number, h: number): void {
+  /**
+   * A sign of one or two lines drawn on a canvas as tall for its width as the sign, upright, facing south, in the
+   * largest font the sign holds: no line is squeezed to fit. Its texture takes the scene's anisotropy. Without a 2D
+   * context (tests) the canvas stays blank.
+   */
+  private sign(lines: string[], x: number, y: number, z: number, w: number, h: number): void {
     const canvas = typeof document === 'undefined' ? null : document.createElement('canvas');
-    const ctx = canvas?.getContext('2d') ?? null;
     let material: Material;
     let texture: CanvasTexture | null = null;
-    if (canvas && ctx) {
+    if (canvas) {
       canvas.width = SIGN_PX.w;
-      canvas.height = SIGN_PX.h;
-      ctx.fillStyle = this.theme.colors['scene-monitor'];
-      ctx.fillRect(0, 0, SIGN_PX.w, SIGN_PX.h);
-      ctx.fillStyle = this.theme.colors['scene-paper'];
-      ctx.font = `600 ${SIGN_PX.font}px ui-monospace, monospace`;
-      ctx.textAlign = 'center';
-      ctx.textBaseline = 'middle';
-      ctx.fillText(text, SIGN_PX.w / 2, SIGN_PX.h / 2, SIGN_PX.w - 24);
+      canvas.height = Math.round((SIGN_PX.w * h) / w);
+      const ctx = canvas.getContext('2d');
+      if (ctx) this.drawSign(ctx, lines, canvas.width, canvas.height);
       texture = new CanvasTexture(canvas);
       texture.colorSpace = SRGBColorSpace;
+      texture.anisotropy = this.anisotropy;
       material = new MeshBasicMaterial({ map: texture });
     } else {
       material = new MeshBasicMaterial({ color: this.theme.colors['scene-monitor'] });
     }
     const mesh = new Mesh(this.geo.plane(w, h), material);
-    mesh.name = `sign ${text}`;
+    mesh.name = `sign ${lines.join(' · ')}`;
     mesh.position.set(x, y, z);
     this.content.add(mesh);
     this.signs.push({ texture, material });
+  }
+
+  /** The plate, and its lines centred on it: the first at the largest font that fits, the second SUB_LINE of it. */
+  private drawSign(ctx: CanvasRenderingContext2D, lines: string[], w: number, h: number): void {
+    const pad = Math.round(SIGN_PX.pad * h);
+    const scales = lines.map((_, i) => (i === 0 ? 1 : SUB_LINE));
+    const ems = scales.reduce((sum, k) => sum + k * SIGN_PX.leading, 0);
+    let font = Math.floor((h - 2 * pad) / ems);
+    const fontOf = (px: number) => `600 ${px}px ui-monospace, monospace`;
+    // Shrinks the font until the widest line fits between the pads.
+    for (; font > 8; font--) {
+      const widest = Math.max(
+        ...lines.map((line, i) => {
+          ctx.font = fontOf(Math.round(font * scales[i]!));
+          return ctx.measureText(line).width;
+        }),
+      );
+      if (widest <= w - 2 * pad) break;
+    }
+    ctx.fillStyle = this.theme.colors['scene-monitor'];
+    ctx.fillRect(0, 0, w, h);
+    ctx.fillStyle = this.theme.colors['scene-paper'];
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    let top = (h - ems * font) / 2;
+    lines.forEach((line, i) => {
+      const lineH = font * scales[i]! * SIGN_PX.leading;
+      ctx.font = fontOf(Math.round(font * scales[i]!));
+      ctx.fillText(line, w / 2, top + lineH / 2);
+      top += lineH;
+    });
   }
 
   private fitSun(size: { w: number; h: number }): void {
