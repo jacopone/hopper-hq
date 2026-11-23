@@ -53,4 +53,12 @@ describe('floors by repository', () => {
     expect(rulesFor('repo')).toBe(REPO_FLOOR_RULES);
     expect(rulesFor('feature')).toBe(DEFAULT_FEATURE_RULES);
   });
+
+  it('makes no feature in folder mode either, and carries the folders it reads floors from', () => {
+    const folders = { home: '/home/j', containers: ['/home/j/amatino'] };
+    const rules = rulesFor('folder', folders);
+    expect(rules.folders).toEqual(folders);
+    expect(deriveFeature('feat/checkout-v2', 'shop', rules)).toBeNull();
+    expect(rulesFor('repo').folders).toBeUndefined();
+  });
 });

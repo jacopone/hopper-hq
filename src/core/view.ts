@@ -1,12 +1,15 @@
 import { DEFAULT_THRESHOLDS, type Thresholds } from '../config.js';
 import { capKey } from '../scene/text.js';
 import { DEFAULT_FEATURE_RULES, deriveFeature, type FeatureRules } from './feature.js';
+import { folderFloorOf, type FolderFloor } from './folder.js';
 import type { Session, SessionState } from './types.js';
 
 export interface SessionView extends Session {
   effectiveState: SessionState;
   effectiveSince: number;
   feature: string | null;
+  /** In folder mode, the project folder whose floor the session is on; null in the other modes. */
+  folder: FolderFloor | null;
 }
 
 export function effectiveState(s: Session, now: number, t: Thresholds = DEFAULT_THRESHOLDS): { state: SessionState; since: number } {
@@ -41,12 +44,28 @@ export function effectiveState(s: Session, now: number, t: Thresholds = DEFAULT_
 
 export function toView(s: Session, now: number, t: Thresholds = DEFAULT_THRESHOLDS, rules: FeatureRules = DEFAULT_FEATURE_RULES): SessionView {
   const eff = effectiveState(s, now, t);
-  return { ...s, effectiveState: eff.state, effectiveSince: eff.since, feature: deriveFeature(s.workspace.branch, s.workspace.repoName, rules) };
+  return { ...s, effectiveState: eff.state, effectiveSince: eff.since, ...floorOf(s, rules) };
 }
 
-/** The floor a session works on: its feature, else its repository's department, keyed by repo root (cwd outside git). */
-export function floorKeyOf(v: Pick<SessionView, 'feature' | 'workspace'>): string {
-  return capKey(v.feature ? `feature:${v.feature}` : `repo:${repoRootOf(v)}`);
+/** What a session's floor is made of: its feature, and in folder mode its project folder. */
+function floorOf(s: Pick<Session, 'workspace'>, rules: FeatureRules): Pick<SessionView, 'feature' | 'folder'> {
+  return {
+    feature: deriveFeature(s.workspace.branch, s.workspace.repoName, rules),
+    folder: rules.folders ? folderFloorOf(s.workspace.cwd, rules.folders) : null,
+  };
+}
+
+/**
+ * The floor a session works on: its feature, else in folder mode its project folder, else its repository's department,
+ * keyed by repo root (cwd outside git).
+ */
+export function floorKeyOf(v: Pick<SessionView, 'feature' | 'workspace'> & { folder?: FolderFloor | null }): string {
+  return capKey(v.feature ? `feature:${v.feature}` : v.folder ? `folder:${v.folder.key}` : `repo:${repoRootOf(v)}`);
+}
+
+/** The floor of a stored session under these rules: the key its view gets. */
+export function floorKeyOfSession(s: Pick<Session, 'workspace'>, rules: FeatureRules = DEFAULT_FEATURE_RULES): string {
+  return floorKeyOf({ workspace: s.workspace, ...floorOf(s, rules) });
 }
 
 /** The island a session sits at: one per checkout, keyed by worktree root (cwd outside git, or when saved without a root). */
@@ -113,7 +132,8 @@ export function byCodeUnit(a: string, b: string): number {
 
 /**
  * Floors, newest first. `firstSeen` holds each floor key's first-seen time, which keeps floors in place as sessions come
- * and go. A department floor is named after the first of its repositories' labels, whatever the order of its sessions.
+ * and go. A department floor is named after the first of its repositories' labels, whatever the order of its sessions;
+ * a project folder's floor, after its folder.
  */
 export function buildFloors(views: readonly SessionView[], firstSeen?: ReadonlyMap<string, number>): Floor[] {
   const label = repoLabels(views);
@@ -124,7 +144,7 @@ export function buildFloors(views: readonly SessionView[], firstSeen?: ReadonlyM
     const repo = label(v);
     let f = map.get(key);
     if (!f) {
-      f = { key, kind: v.feature ? 'feature' : 'department', name: v.feature ?? repo, repos: [], sessions: [], counts: {}, openedAt: v.startedAt, dormant: true };
+      f = { key, kind: v.feature ? 'feature' : 'department', name: v.feature ?? v.folder?.name ?? repo, repos: [], sessions: [], counts: {}, openedAt: v.startedAt, dormant: true };
       map.set(key, f);
     }
     f.sessions.push(v);
@@ -137,7 +157,7 @@ export function buildFloors(views: readonly SessionView[], firstSeen?: ReadonlyM
   for (const f of floors) {
     f.openedAt = firstSeen?.get(f.key) ?? f.openedAt;
     f.repos.sort();
-    if (f.kind === 'department') f.name = f.repos[0]!;
+    if (f.kind === 'department' && !f.sessions[0]!.folder) f.name = f.repos[0]!;
     f.sessions.sort((a, b) => byCodeUnit(a.workspace.repoName, b.workspace.repoName) || a.startedAt - b.startedAt || byCodeUnit(a.id, b.id));
   }
   return floors.sort((a, b) => b.openedAt - a.openedAt || byCodeUnit(a.key, b.key));

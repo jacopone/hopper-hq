@@ -201,7 +201,7 @@ describe('up', () => {
     }
     const h = capture();
     await main(['--help'], h.io);
-    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR]');
+    expect(h.out[0]).toContain('hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo|folder] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR]');
   });
 });
 

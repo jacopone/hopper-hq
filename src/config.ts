@@ -1,6 +1,7 @@
 import { homedir } from 'node:os';
 import { delimiter, join } from 'node:path';
 import { FLOOR_MODES, type FloorMode } from './core/feature.js';
+import type { FolderRules } from './core/folder.js';
 import { TERMINAL_KINDS, type TerminalChoice } from './core/terminal.js';
 
 /** One of Claude Code's config directories (sessions/, projects/, settings.json), and what to call its sessions. */
@@ -22,6 +23,20 @@ export function resolveFloorMode(value: string | undefined, env: NodeJS.ProcessE
   const word = value ?? env.HOPPER_HQ_FLOORS ?? 'feature';
   if (!(FLOOR_MODES as readonly string[]).includes(word)) throw new Error(`Unknown floor mode: ${word} (one of ${FLOOR_MODES.join(', ')})`);
   return word as FloorMode;
+}
+
+/** The container folders of folder mode when HOPPER_HQ_FLOOR_CONTAINERS does not name any. */
+export const DEFAULT_FLOOR_CONTAINERS = ['~/amatino', '~/experiments', '~/tools'];
+
+/**
+ * The folders folder mode reads floors from: the home, and the container folders HOPPER_HQ_FLOOR_CONTAINERS lists
+ * (separated as PATH is, a leading ~ for the home), else DEFAULT_FLOOR_CONTAINERS. Set and empty, it names none.
+ */
+export function resolveFolderRules(env: NodeJS.ProcessEnv = process.env, home: string = homedir()): FolderRules {
+  const listed = env.HOPPER_HQ_FLOOR_CONTAINERS;
+  const specs = listed === undefined ? DEFAULT_FLOOR_CONTAINERS : listed.split(delimiter);
+  const expand = (p: string) => (p === '~' ? home : p.startsWith('~/') ? join(home, p.slice(2)) : p);
+  return { home, containers: specs.filter(Boolean).map((p) => expand(p).replace(/(.)\/+$/, '$1')) };
 }
 
 /** The terminal choice named by an option or HOPPER_HQ_TERMINAL; 'auto' when neither says; an error for a word that is no choice. */

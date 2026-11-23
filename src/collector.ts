@@ -1,9 +1,9 @@
 import type { WorkspaceResolver } from './adapters/git.js';
 import { DEFAULT_THRESHOLDS, type Thresholds } from './config.js';
-import { DEFAULT_FEATURE_RULES, deriveFeature, type FeatureRules } from './core/feature.js';
+import { DEFAULT_FEATURE_RULES, type FeatureRules } from './core/feature.js';
 import { applyEvent, markSeen, normalizeSession, settleRestored } from './core/reducer.js';
 import type { CollectorEvent, EventSourceKind, Lobby, RawEvent, Session, SessionSummary, WaitReason } from './core/types.js';
-import { buildAttention, buildFloors, floorKeyOf, toView, type Attention, type Floor, type SessionView } from './core/view.js';
+import { buildAttention, buildFloors, floorKeyOfSession, toView, type Attention, type Floor, type SessionView } from './core/view.js';
 import type { TerminalKind } from './core/terminal.js';
 import { buildFloorDetail, buildScene, DEFAULT_TERMINAL } from './scene/build.js';
 import { buildLobbyDetail } from './scene/lobby.js';
@@ -141,7 +141,7 @@ export class Collector {
   }
 
   private floorKey(s: Session): string {
-    return floorKeyOf({ workspace: s.workspace, feature: deriveFeature(s.workspace.branch, s.workspace.repoName, this.o.featureRules ?? DEFAULT_FEATURE_RULES) });
+    return floorKeyOfSession(s, this.o.featureRules ?? DEFAULT_FEATURE_RULES);
   }
 
   /** The floor a session sits on; null once it has ended. */

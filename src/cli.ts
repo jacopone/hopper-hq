@@ -107,8 +107,8 @@ const stdio: Io = {
 export const HELP = `hopper-hq: watch your coding-agent sessions work
 
 Usage:
-  hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR]
-  hopper-hq start [--port N] [--claude-dir DIR[=LABEL]]... [--floors feature|repo] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR] [--no-watch]
+  hopper-hq up [--port N] [--no-open] [--claude-dir DIR[=LABEL]]... [--floors feature|repo|folder] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR]
+  hopper-hq start [--port N] [--claude-dir DIR[=LABEL]]... [--floors feature|repo|folder] [--terminal auto|tmux|herdr] [--gatekeeper none|gordon[=DIR]] [--data-dir DIR] [--no-watch]
   hopper-hq down [--data-dir DIR]
   hopper-hq status [--format text|tmux|json] [--data-dir DIR]
   hopper-hq ls [--data-dir DIR]

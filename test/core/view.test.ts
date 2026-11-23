@@ -2,7 +2,8 @@ import { describe, expect, it } from 'vitest';
 import { DEFAULT_THRESHOLDS as T } from '../../src/config.js';
 import { newSession } from '../../src/core/reducer.js';
 import type { Session, SessionState, WorkflowRun } from '../../src/core/types.js';
-import { buildAttention, buildFloors, byCodeUnit, effectiveState, floorKeyOf, islandKeyOf, toView } from '../../src/core/view.js';
+import { rulesFor } from '../../src/core/feature.js';
+import { buildAttention, buildFloors, byCodeUnit, effectiveState, floorKeyOf, floorKeyOfSession, islandKeyOf, toView } from '../../src/core/view.js';
 import { KEY_MAX } from '../../src/scene/text.js';
 import { WS } from '../helpers/events.js';
 
@@ -114,6 +115,41 @@ describe('floor and island keys', () => {
   it('cleans keys and caps them at KEY_MAX', () => {
     expect(islandKeyOf(at('a', '/home/dev/a\u0007pi', 'main'))).toBe('/home/dev/api');
     expect(floorKeyOf(at('b', '/' + 'x'.repeat(600), 'main'))).toHaveLength(256);
+  });
+});
+
+describe('floors by project folder', () => {
+  const now = 10 * H;
+  const rules = rulesFor('folder', { home: '/home/j', containers: ['/home/j/amatino', '/home/j/experiments', '/home/j/tools'] });
+  /** A session in `cwd`, in the repository at `repo` (null outside git), on `branch`. */
+  const at = (id: string, cwd: string, repo: string | null, branch: string | null = 'main', extra: Partial<Session['workspace']> = {}) =>
+    sess(id, 'working', now - 1, { workspace: { cwd, repoRoot: repo, repoName: (repo ?? cwd).split('/').pop()!, worktree: false, branch: repo ? branch : null, root: repo, ...extra } });
+  const floors = (sessions: Session[]) =>
+    buildFloors(sessions.map((s) => toView(s, now, T, rules))).sort((a, b) => byCodeUnit(a.key, b.key)).map((f) => [f.key, f.name, f.kind, f.repos]);
+
+  it('puts a project folder and a repository inside it on one floor, named after the folder', () => {
+    expect(floors([at('a', '/home/j/tenuta', null), at('b', '/home/j/tenuta/controllo-gestione', '/home/j/tenuta/controllo-gestione', 'feat/budget')])).toEqual([
+      ['folder:/home/j/tenuta', 'tenuta', 'department', ['controllo-gestione', 'tenuta']],
+    ]);
+  });
+
+  it('gives two repositories in a container folder two floors, and a worktree under one its repository floor', () => {
+    const wt = at('c', '/home/j/amatino/amatino-app/.claude/worktrees/x', '/home/j/amatino/amatino-app', 'worktree-x', { worktree: true, root: '/home/j/amatino/amatino-app/.claude/worktrees/x' });
+    expect(floors([at('a', '/home/j/amatino/amatino-app', '/home/j/amatino/amatino-app'), at('b', '/home/j/amatino/amatino-crm', '/home/j/amatino/amatino-crm'), wt])).toEqual([
+      ['folder:/home/j/amatino/amatino-app', 'amatino-app', 'department', ['amatino-app']],
+      ['folder:/home/j/amatino/amatino-crm', 'amatino-crm', 'department', ['amatino-crm']],
+    ]);
+  });
+
+  it('puts the sessions outside the home on one floor, other', () => {
+    expect(floors([at('a', '/tmp', null), at('b', '/srv/api', '/srv/api')])).toEqual([['folder:other', 'other', 'department', ['api', 'tmp']]]);
+  });
+
+  it('keys a session the same in the collector as on its floor', () => {
+    const s = at('b', '/home/j/tenuta/controllo-gestione', '/home/j/tenuta/controllo-gestione', 'feat/budget');
+    expect(floorKeyOfSession(s, rules)).toBe(floorKeyOf(toView(s, now, T, rules)));
+    expect(floorKeyOfSession(s, rules)).toBe('folder:/home/j/tenuta');
+    expect(floorKeyOfSession(s, rulesFor('repo'))).toBe('repo:/home/j/tenuta/controllo-gestione');
   });
 });
 

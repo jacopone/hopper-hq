@@ -13,7 +13,7 @@ import { demoSummaryLine, startDemo } from './adapters/demo.js';
 import { createGitResolver } from './adapters/git.js';
 import { callDaemon } from './client.js';
 import { Collector } from './collector.js';
-import { DEFAULT_PORT, resolveFloorMode, resolveGatekeeper, resolvePaths, resolveTerminal, type GatekeeperChoice, type Paths } from './config.js';
+import { DEFAULT_PORT, resolveFloorMode, resolveFolderRules, resolveGatekeeper, resolvePaths, resolveTerminal, type GatekeeperChoice, type Paths } from './config.js';
 import { rulesFor, type FloorMode } from './core/feature.js';
 import type { TerminalChoice, TerminalKind } from './core/terminal.js';
 import { readDaemonFile, removeDaemonFile, writeDaemonFile } from './daemon-file.js';
@@ -35,7 +35,7 @@ export interface DaemonOptions {
   /** The config directories to watch, 'DIR' or 'DIR=LABEL' each: one per account when several accounts run on the machine. */
   claudeDirs?: string[];
   dataDir?: string;
-  /** One floor per feature (default) or per repository. */
+  /** One floor per feature (default), per repository, or per project folder. */
   floors?: FloorMode;
   /** The terminal Go switches: tmux, herdr, or auto (default), which takes herdr when it answers. */
   terminal?: TerminalChoice;
@@ -167,7 +167,7 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
     log,
     ignoreCwd,
     holdRestored: watchFiles,
-    featureRules: rulesFor(floors),
+    featureRules: rulesFor(floors, floors === 'folder' ? resolveFolderRules() : undefined),
     terminal,
   });
   const summarizer = new Summarizer({
@@ -246,7 +246,8 @@ async function serve(opts: DaemonOptions, paths: Paths, lock: DataDirLock): Prom
   }
   const demo = opts.demo ? startDemo((e) => void collector.ingest(e), { showcase: opts.showcase }) : null;
   log(`hopper-hq is listening on http://127.0.0.1:${port}`);
-  if (floors !== 'feature') log(`hopper-hq gives each repository a floor (--floors ${floors})`);
+  if (floors === 'repo') log('hopper-hq gives each repository a floor (--floors repo)');
+  if (floors === 'folder') log('hopper-hq gives each project folder a floor (--floors folder)');
   if (!opts.demo) log(`hopper-hq switches panes with ${terminal}${choice === 'auto' ? ' (--terminal auto)' : ''}`);
   if (gatekeeper && gate.kind !== 'none') log(`hopper-hq shows the Lobby of ${gate.kind} (${gate.dir ?? DEFAULT_GORDON_DIR})`);
   if (labels && paths.claudeDirs.length > 1) log(`hopper-hq watches ${paths.claudeDirs.length} config directories: ${paths.claudeDirs.map((d) => `${d.dir} (${labels.get(d.dir)})`).join(', ')}`);
